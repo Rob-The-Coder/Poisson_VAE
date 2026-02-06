@@ -1,17 +1,20 @@
 import argparse
 
+from torchinfo import summary
+
 from utils import CustomPoissonSampling, CustomDataset, ELBO_Loss, VAE_Trainer, Model_Args
 from vae import VAE
 
 def parse_args():
-  parser = argparse.ArgumentParser(description="VAE Training Script")
+  parser = argparse.ArgumentParser(description="VAE training script")
 
   # Path
   parser.add_argument("--path", type=str, required=False, default="/home/schifano/Documents/Thesis/Poisson_Gradient_Approximation/archive/", help="Path alla cartella immagini")
+  parser.add_argument("--project_dir", type=str, required=False, default="/home/schifano/Documents/Thesis/Poisson_Gradient_Approximation/", help="Path of the project folder")
 
   # Hyperparameters
-  parser.add_argument("--filename", type=str, default="VAE.pt")
-  parser.add_argument("--checkpoint", type=str, default="VAE_checkpoint.pt")
+  parser.add_argument("--vae_filename", type=str, default="VAE.pt")
+  parser.add_argument("--vea_checkpoint", type=str, default="VAE_checkpoint.pt")
   parser.add_argument("--height", type=int, default=64)
   parser.add_argument("--width", type=int, default=64)
   parser.add_argument("--batch_size", type=int, default=128)
@@ -53,7 +56,10 @@ if __name__ == "__main__":
     RESCALE=args.rescale
   )
 
-  model_args = Model_Args(vae_filename=args.filename, checkpoint_filename=args.checkpoint)
+  model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename=args.vae_checkpoint, project_dir=args.project_dir)
+
+  summary(vae, input_size=(train_loader.batch_size, 3, args.height, args.width))
+
 
   try:
     trainer.train(
