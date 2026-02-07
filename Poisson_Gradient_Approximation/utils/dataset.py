@@ -22,7 +22,7 @@ class CustomDataset(torch.utils.data.Dataset):
     return image, 0 # Return a dummy label for compatibility with DataLoader
 
   @staticmethod
-  def get_dataloaders(height, width, batch_size, path):
+  def __get_transform(height, width):
     transform = torchvision.transforms.Compose([
       torchvision.transforms.CenterCrop(178),
       torchvision.transforms.Resize((height, width)),
@@ -30,6 +30,12 @@ class CustomDataset(torch.utils.data.Dataset):
       torchvision.transforms.ToTensor(),
       torchvision.transforms.Normalize(0.5, 0.5)
     ])
+
+    return transform
+
+  @staticmethod
+  def get_dataloaders(height, width, batch_size, path):
+    transform = CustomDataset.__get_transform(height, width)
 
     img_folder_path = Path(path) / "img_align_celeba" / "img_align_celeba"
     partition_df = pd.read_csv(Path(path) / "list_eval_partition.csv")
@@ -45,3 +51,16 @@ class CustomDataset(torch.utils.data.Dataset):
     valid_loader = torch.utils.data.DataLoader(valid_set, batch_size=batch_size, shuffle=False, drop_last=True, num_workers=4, pin_memory=True)
 
     return train_loader, valid_loader
+
+  @staticmethod
+  def get_train_set(height, width, path):
+    transform = CustomDataset.__get_transform(height, width)
+
+    img_folder_path = Path(path) / "img_align_celeba" / "img_align_celeba"
+    partition_df = pd.read_csv(Path(path) / "list_eval_partition.csv")
+
+    train_partition = partition_df[partition_df['partition']==0]['image_id'].tolist()
+
+    train_set = CustomDataset(img_folder_path, train_partition, transform=transform)
+
+    return train_set
