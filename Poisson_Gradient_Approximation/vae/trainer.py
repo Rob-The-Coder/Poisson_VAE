@@ -137,13 +137,9 @@ class VAE_Trainer():
     print("LR: " + str(self.lr) + "\nLAMBDA: " + str(self.LAMBDA) + "\nRESCALE: " + str(
       self.RESCALE) + "\nGRADIENT_CLIPPING: " + str(self.gradient_clipping))
 
-  def download_checkpoint(self, model_args: Model_Args):
-    # files.download(colab_args.checkpoint_filename)
-    # print(f"'{model_args.checkpoint_filename}' has been downloaded to your local machine.")
-    pass
+  def train(self, model_args: Model_Args, EPOCHS: int = 200, epochs_to_create_checkpoint: int = 0, optimize: bool = False):
+    torch.backends.cudnn.benchmark = True
 
-  def train(self, model_args: Model_Args, EPOCHS: int = 200, epochs_to_create_checkpoint: int = 0,
-            epochs_to_show_faces: int = 100, optimize: bool = False, download_model: bool = False):
     if self.train_loader is None:
       raise ValueError("Error! Trying to train without specifying the train loader.")
 
@@ -236,12 +232,3 @@ class VAE_Trainer():
         if epochs_to_create_checkpoint!=0 and ((epoch + 1) % epochs_to_create_checkpoint)==0:
           self.trained_epochs += epochs_to_create_checkpoint
           self.create_checkpoint(model_args)
-
-        if epochs_to_show_faces!=0 and ((epoch + 1) % epochs_to_show_faces)==0:
-          # show_faces(faces, "LR: " + str(LR) + ", LAMBDA: " + str(LAMBDA) + ", RESCALE: " + str(RESCALE) + ", Latent_Dim: " + str(latent) + ", Clipping: True")
-          faces = self.vae.generate_faces(num_faces=32, LAMBDA=self.LAMBDA, device=self.__device)
-          #show_faces(faces)
-
-    if download_model:
-      self.vae.download_model(model_args)
-      self.download_checkpoint(model_args)

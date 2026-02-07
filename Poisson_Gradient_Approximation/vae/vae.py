@@ -1,7 +1,6 @@
 import torch
 
 from typing import Optional
-from vae import Encoder, Decoder
 from utils import Model_Args
 
 class VAE(torch.nn.Module):
@@ -12,6 +11,8 @@ class VAE(torch.nn.Module):
     latent_dim,
     sampling,
   ):
+    from vae import Encoder, Decoder
+
     super().__init__()
     self.__latent_dim = latent_dim
     self.__height = height
@@ -26,7 +27,6 @@ class VAE(torch.nn.Module):
     vae = VAE(data["height"], data["width"], data["latent_dim"], data["sampling"])
     vae.load_state_dict(data["params"])
 
-    torch.cuda.set_device(0)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     vae.to(device)
 
@@ -52,10 +52,6 @@ class VAE(torch.nn.Module):
 
   def set_sampling(self, sampling: torch.autograd.Function):
     self.__sampling = sampling
-
-  def refresh(self):
-    self.encoder = Encoder(self.__height, self.__width, self.__latent_dim)
-    self.decoder = Decoder(self.__height, self.__width, self.__latent_dim)
 
   def encode(self, x):
     with torch.no_grad():
@@ -84,11 +80,6 @@ class VAE(torch.nn.Module):
     torch.save(data, model_args.project_dir + "models/" + model_args.vae_filename)
 
     return data
-
-  def download_model(self, model_args: Model_Args):
-    # files.download(model_args.vae_filename)
-    # print(f"'{model_args.vae_filename}' has been downloaded to your local machine.")
-    pass
 
   def forward(self, x):
     lam = self.encoder(x)

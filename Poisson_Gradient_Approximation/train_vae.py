@@ -2,8 +2,8 @@ import argparse
 
 from torchinfo import summary
 
-from utils import CustomPoissonSampling, CustomDataset, ELBO_Loss, VAE_Trainer, Model_Args
-from vae import VAE
+from utils import CustomPoissonSampling, CustomDataset, ELBO_Loss, Model_Args
+from vae import VAE, VAE_Trainer
 
 def parse_args():
   parser = argparse.ArgumentParser(description="VAE training script")
@@ -25,7 +25,6 @@ def parse_args():
 
   # Training - Hardware/Optimization
   parser.add_argument("--resume", action="store_true", default=False)
-  parser.add_argument("--epochs_to_show_faces", type=int, default=10)
   parser.add_argument("--epochs_to_checkpoint", type=int, default=10)
   parser.add_argument("--epochs", type=int, default=100)
   parser.add_argument("--optimize", action="store_true", default=True, help="Enables JIT and AMP")
@@ -76,10 +75,8 @@ if __name__ == "__main__":
     trainer.train(
       model_args=model_args,
       EPOCHS=args.epochs,
-      epochs_to_create_checkpoint=5,
-      epochs_to_show_faces=1,
+      epochs_to_create_checkpoint=args.epochs_to_checkpoint,
       optimize=args.optimize,
-      download_model = False
     )
   except KeyboardInterrupt:
     print("\nTraining was interrupted. Saving a last checkpoint...")

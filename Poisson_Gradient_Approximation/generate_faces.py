@@ -44,12 +44,12 @@ def parse_args():
 if __name__=="__main__":
   args = parse_args()
 
-  model_args = Model_Args(vae_filename=args.vae_filename, project_dir=args.project_dir)
+  model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename="", project_dir=args.project_dir)
 
   vae = VAE.from_pretrained(model_args)
   device = "cuda" if torch.cuda.is_available() else "cpu"
 
-  faces = vae.generate_faces(num_faces=32, LAMBDA=args.lambda_poisson, device=device)
+  faces = vae.generate_faces(num_faces=args.num_faces, LAMBDA=args.lambda_poisson, device=device)
   show_faces(faces, "")
 
   if args.interpolation:
