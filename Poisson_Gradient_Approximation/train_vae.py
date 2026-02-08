@@ -17,20 +17,20 @@ def parse_args():
   parser.add_argument("--project_dir", type=str, required=False, default="/home/schifano/Documents/Thesis/Poisson_Gradient_Approximation/", help="Path to the project folder")
 
   # Hyperparameters
-  parser.add_argument("--vae_filename", type=str, default="VAE.pt")
-  parser.add_argument("--vae_checkpoint", type=str, default="VAE_checkpoint.pt")
-  parser.add_argument("--height", type=int, default=64)
-  parser.add_argument("--width", type=int, default=64)
-  parser.add_argument("--batch_size", type=int, default=128)
-  parser.add_argument("--lr", type=float, default=1e-4)
+  parser.add_argument("--vae_filename", type=str, default="VAE.pt", help="Name of the generated VAE file")
+  parser.add_argument("--vae_checkpoint", type=str, default="VAE_checkpoint.pt", help="Name of the generated training checkpoint file")
+  parser.add_argument("--height", type=int, default=64, help="Height of the image")
+  parser.add_argument("--width", type=int, default=64, help="Width of the image")
+  parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
+  parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
   parser.add_argument("--rescale", type=float, default=1e-2, help="RESCALE parameter")
   parser.add_argument("--lambda_poisson", type=float, default=10, help="LAMBDA parameter")
-  parser.add_argument("--latent_dim", type=int, default=128)
+  parser.add_argument("--latent_dim", type=int, default=128, help="Dimension of the latent space")
 
   # Training - Hardware/Optimization
-  parser.add_argument("--resume", action="store_true", default=False)
-  parser.add_argument("--epochs_to_checkpoint", type=int, default=10)
-  parser.add_argument("--epochs", type=int, default=100)
+  parser.add_argument("--resume", action="store_true", default=False, help="Resume training from checkpoint")
+  parser.add_argument("--epochs_to_checkpoint", type=int, default=10, help="Number of epochs to create a checkpoint")
+  parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train")
   parser.add_argument("--optimize", action="store_true", default=True, help="Enables JIT and AMP")
   parser.add_argument("--clip_gradients", action="store_false", default=False, dest="clip", help="Disables gradient clipping")
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
   # Printing args
   print_args(args)
 
-  # Checking the existance of paths
+  # Checking the existence of paths
   project_dir = Path(args.project_dir)
   path = Path(args.path)
 

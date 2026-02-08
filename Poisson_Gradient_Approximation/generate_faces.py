@@ -4,6 +4,12 @@ import torchvision
 import math
 import argparse
 
+from pathlib import Path
+from rich import print
+from rich.console import Console
+from rich.table import Table
+
+
 from Poisson_Gradient_Approximation.utils import CustomDataset
 from vae import VAE
 from utils import Model_Args
@@ -41,18 +47,50 @@ def parse_args():
 
   return parser.parse_args()
 
+def print_args(args):
+  console = Console()
+
+  table = Table(title="VAE Training Configuration")
+
+  table.add_column("Parameter", style="cyan")
+  table.add_column("Value", style="magenta")
+
+  for key, value in vars(args).items():
+    table.add_row(key, str(value))
+
+  console.print(table)
+
+
 if __name__=="__main__":
+  # Parsing args from command line
   args = parse_args()
+
+  # Printing args
+  print_args(args)
+
+  # Checking the existence of paths
+  project_dir = Path(args.project_dir)
+  path = Path(args.path)
+
+  if not project_dir.exists():
+    print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
+    exit(1)
+
+  if not path.exists():
+    print(f"[bold red][ERROR]: [/bold red] Path {path} not found!")
+    exit(1)
 
   model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename="", project_dir=args.project_dir)
 
   vae = VAE.from_pretrained(model_args)
   device = "cuda" if torch.cuda.is_available() else "cpu"
 
+  print("\n[bold cyan][INFO]: [/bold cyan] Generating faces...")
   faces = vae.generate_faces(num_faces=args.num_faces, LAMBDA=args.lambda_poisson, device=device)
   show_faces(faces, "")
 
   if args.interpolation:
+    print("\n[bold cyan][INFO]: [/bold cyan] Generating interpolation image...")
     train_set = CustomDataset.get_train_set(args.height, args.width, args.path)
 
     x0 = train_set[args.start][0][None].to(device)

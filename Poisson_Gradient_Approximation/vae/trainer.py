@@ -174,6 +174,7 @@ class VAE_Trainer():
 
     tot_loss = 0
     num_batch = 0
+    batch_update_rate = 20
     initial = self.trained_epochs
     with Progress(
         SpinnerColumn(),
@@ -204,7 +205,7 @@ class VAE_Trainer():
 
           self.optimizer.zero_grad()
 
-          # Executing optimized version or normal depending on self.optimize
+          # Executing optimized version or normal depending on optimize
           if optimize:
             with autocast(self.__device, enabled=True, dtype=torch.float16):
               lam, y = self.vae(x)
@@ -238,12 +239,12 @@ class VAE_Trainer():
 
             self.optimizer.step()
 
-          if (num_batch + 1) % 1 == 0:
+          if (num_batch + 1) % batch_update_rate == 0:
             metrics["batch_kl_divergence"] = f"{kl_div.item():.4f}"
             metrics["batch_reconstruction_error"] = f"{rec_error.item():.4f}"
 
-            progress.update(epochs_task, advanced=0, kl=metrics["batch_kl_divergence"], rec=metrics["batch_reconstruction_error"])
-            progress.update(batch_task, advance=1)
+            progress.update(epochs_task, advance=0, kl=metrics["batch_kl_divergence"], rec=metrics["batch_reconstruction_error"])
+            progress.update(batch_task, advance=batch_update_rate)
 
           num_batch += 1
 
