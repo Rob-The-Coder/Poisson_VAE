@@ -3,6 +3,9 @@ import torch
 from typing import Optional
 from torch.amp.autocast_mode import autocast
 from torch.cuda.amp.grad_scaler import GradScaler
+
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
+
 from tqdm.auto import tqdm
 
 from vae import VAE
@@ -172,62 +175,80 @@ class VAE_Trainer():
     tot_loss = 0
     num_batch = 0
     initial = self.trained_epochs
-    with tqdm(range(EPOCHS), unit="epoch", initial=initial, total=(initial + EPOCHS), position=0, leave=True) as tepoch:
-      for epoch in tepoch:
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=None),
+        MofNCompleteColumn(),
+        TextColumn("[bold cyan]AVG_LOSS: {task.fields[avg_loss]}"),
+        TextColumn("[bold magenta]KL: {task.fields[kl]}"),
+        TextColumn("[bold yellow]REC: {task.fields[rec]}"),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        expand=True
+    ) as progress:
+      epochs_task = progress.add_task("[green]Total Progress", total=EPOCHS, avg_loss="---", kl="---", rec="---")
+      batch_task = progress.add_task("[cyan]Current epoch", total=len(self.train_loader), avg_loss="---", kl="---", rec="---")
+
+      for epoch in range(EPOCHS):
         tot_loss = 0
         num_batch = 0
+        curr_epoch = epoch + initial + 1
 
-        # Inner tqdm for batches
-        with tqdm(self.train_loader, unit="batch", disable=True) as tbatch:
-          for x, label in tbatch:
-            x = x.to(self.__device)
+        # Second bar reset for current epoch
+        progress.reset(batch_task, description=f"[cyan]Epoch {curr_epoch} Batches")
 
-            self.optimizer.zero_grad()
+        # Epoch training loop
+        for x, label in self.train_loader:
+          x = x.to(self.__device)
 
-            # Executing optimized version or normal depending on self.optimize
-            if optimize:
-              with autocast(self.__device, enabled=True, dtype=torch.float16):
-                lam, y = self.vae(x)
+          self.optimizer.zero_grad()
 
-                kl_div, rec_error = self.loss_function.compute_loss(x, y, lam, self.LAMBDA, self.RESCALE)
-
-              with autocast(self.__device, enabled=False):
-                loss = kl_div + rec_error
-
-              tot_loss += loss.item()
-
-              scaler.scale(loss).backward()
-
-              if self.gradient_clipping:
-                scaler.unscale_(self.optimizer)
-                torch.nn.utils.clip_grad_norm_(self.vae.parameters(), 1.0)
-
-              scaler.step(self.optimizer)
-              scaler.update()
-            else:
+          # Executing optimized version or normal depending on self.optimize
+          if optimize:
+            with autocast(self.__device, enabled=True, dtype=torch.float16):
               lam, y = self.vae(x)
 
               kl_div, rec_error = self.loss_function.compute_loss(x, y, lam, self.LAMBDA, self.RESCALE)
+
+            with autocast(self.__device, enabled=False):
               loss = kl_div + rec_error
 
-              tot_loss += loss.item()
-              loss.backward()
+            tot_loss += loss.item()
 
-              if self.gradient_clipping:
-                torch.nn.utils.clip_grad_norm_(self.vae.parameters(), 1.0)
+            scaler.scale(loss).backward()
 
-              self.optimizer.step()
+            if self.gradient_clipping:
+              scaler.unscale_(self.optimizer)
+              torch.nn.utils.clip_grad_norm_(self.vae.parameters(), 1.0)
 
-            if (num_batch + 1) % 20==0:
-              metrics["batch_kl_divergence"] = f"{kl_div.item():.4f}"
-              metrics["batch_reconstruction_error"] = f"{rec_error.item():.4f}"
-              tepoch.set_postfix(metrics)
+            scaler.step(self.optimizer)
+            scaler.update()
+          else:
+            lam, y = self.vae(x)
 
-            num_batch += 1
+            kl_div, rec_error = self.loss_function.compute_loss(x, y, lam, self.LAMBDA, self.RESCALE)
+            loss = kl_div + rec_error
+
+            tot_loss += loss.item()
+            loss.backward()
+
+            if self.gradient_clipping:
+              torch.nn.utils.clip_grad_norm_(self.vae.parameters(), 1.0)
+
+            self.optimizer.step()
+
+          if (num_batch + 1) % 1 == 0:
+            metrics["batch_kl_divergence"] = f"{kl_div.item():.4f}"
+            metrics["batch_reconstruction_error"] = f"{rec_error.item():.4f}"
+
+            progress.update(epochs_task, advanced=0, kl=metrics["batch_kl_divergence"], rec=metrics["batch_reconstruction_error"])
+            progress.update(batch_task, advance=1)
+
+          num_batch += 1
 
         metrics["avg_epoch_loss"] = f"{tot_loss / num_batch:.4f}"
-        tepoch.set_description(f"Epoch {epoch + initial + 1}")
-        tepoch.set_postfix(metrics)
+        progress.update(epochs_task, advance=1, avg_loss=metrics["avg_epoch_loss"])
 
         if epochs_to_create_checkpoint!=0 and ((epoch + 1) % epochs_to_create_checkpoint)==0:
           self.trained_epochs += epochs_to_create_checkpoint

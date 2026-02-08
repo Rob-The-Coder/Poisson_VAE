@@ -1,6 +1,10 @@
 import argparse
 
+from pathlib import Path
 from torchinfo import summary
+from rich import print
+from rich.console import Console
+from rich.table import Table
 
 from utils import CustomPoissonSampling, CustomDataset, ELBO_Loss, Model_Args
 from vae import VAE, VAE_Trainer
@@ -28,12 +32,41 @@ def parse_args():
   parser.add_argument("--epochs_to_checkpoint", type=int, default=10)
   parser.add_argument("--epochs", type=int, default=100)
   parser.add_argument("--optimize", action="store_true", default=True, help="Enables JIT and AMP")
-  parser.add_argument("--clip_gradients", action="store_false", dest="clip", help="Disables gradient clipping")
+  parser.add_argument("--clip_gradients", action="store_false", default=False, dest="clip", help="Disables gradient clipping")
 
   return parser.parse_args()
 
+def print_args(args):
+  console = Console()
+
+  table = Table(title="VAE Training Configuration")
+
+  table.add_column("Parameter", style="cyan")
+  table.add_column("Value", style="magenta")
+
+  for key, value in vars(args).items():
+    table.add_row(key, str(value))
+
+  console.print(table)
+
 if __name__ == "__main__":
+  # Parsing args from command line
   args = parse_args()
+
+  # Printing args
+  print_args(args)
+
+  # Checking the existance of paths
+  project_dir = Path(args.project_dir)
+  path = Path(args.path)
+
+  if not project_dir.exists():
+    print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
+    exit(1)
+
+  if not path.exists():
+    print(f"[bold red][ERROR]: [/bold red] Path {path} not found!")
+    exit(1)
 
   model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename=args.vae_checkpoint, project_dir=args.project_dir)
 
@@ -47,16 +80,18 @@ if __name__ == "__main__":
   elbo_loss = ELBO_Loss()
 
   if args.resume:
-    print("\nRecovering model from checkpoint...")
+    print("\n[bold cyan][INFO]: [/bold cyan] Recovering model from checkpoint...")
 
     trainer = VAE_Trainer.from_checkpoint(model_args)
     trainer.set_train_loader(train_loader)
     trainer.set_loss_function(elbo_loss)
     trainer.explain_checkpoint()
   else:
-    print("\nInstantiating model and trainer...")
+    print("\n[bold cyan][INFO]: [/bold cyan] Instantiating model and trainer...")
 
     vae = VAE(height=args.height, width=args.width, latent_dim=args.latent_dim, sampling=CustomPoissonSampling.apply)
+
+    print("\n[bold green][DEBUG]: [/bold green] Printing summary of model...")
     summary(vae, input_size=(train_loader.batch_size, 3, args.height, args.width))
 
     trainer = VAE_Trainer(
@@ -70,7 +105,7 @@ if __name__ == "__main__":
     )
 
   try:
-    print("\nStarting training...")
+    print("\n[bold cyan][INFO]: [/bold cyan] Starting training...")
 
     trainer.train(
       model_args=model_args,
@@ -79,5 +114,5 @@ if __name__ == "__main__":
       optimize=args.optimize,
     )
   except KeyboardInterrupt:
-    print("\nTraining was interrupted. Saving a last checkpoint...")
+    print("\n[bold red][ERROR]: [/bold red] Training was interrupted. Saving a last checkpoint...")
     trainer.create_checkpoint(model_args=model_args)
