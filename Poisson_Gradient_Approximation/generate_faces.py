@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 
-from Poisson_Gradient_Approximation.utils import CustomDataset
+from utils import CustomDataset
 from vae import VAE
 from utils import Model_Args
 
@@ -24,7 +24,7 @@ def show_faces(faces, title: str = ""):
   g = torchvision.utils.make_grid(faces, nrow=nrow, normalize=True, value_range=(-1, 1))
   plt.imshow(g.permute(1, 2, 0).detach().cpu().numpy())
   plt.axis("off")
-  plt.title(title, fontsize=15)
+  plt.title(title, fontsize=10)
   plt.show()
 
 def parse_args():
@@ -50,7 +50,7 @@ def parse_args():
 def print_args(args):
   console = Console()
 
-  table = Table(title="VAE Training Configuration")
+  table = Table(title="VAE images generation configuration")
 
   table.add_column("Parameter", style="cyan")
   table.add_column("Value", style="magenta")
@@ -87,7 +87,7 @@ if __name__=="__main__":
 
   print("\n[bold cyan][INFO]: [/bold cyan] Generating faces...")
   faces = vae.generate_faces(num_faces=args.num_faces, LAMBDA=args.lambda_poisson, device=device)
-  show_faces(faces, "")
+  show_faces(faces, args.title)
 
   if args.interpolation:
     print("\n[bold cyan][INFO]: [/bold cyan] Generating interpolation image...")

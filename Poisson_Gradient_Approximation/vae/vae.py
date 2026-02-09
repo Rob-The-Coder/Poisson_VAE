@@ -42,7 +42,7 @@ class VAE(torch.nn.Module):
 
     if model_args is not None:
       # Loading model from filesystem
-      data = torch.load(model_args.project_dir + "models/" + model_args.vae_filename, weights_only=False)
+      data = torch.load(model_args.project_dir + "models/" + model_args.vae_filename)
 
     return VAE.__restore_vae(data)
 

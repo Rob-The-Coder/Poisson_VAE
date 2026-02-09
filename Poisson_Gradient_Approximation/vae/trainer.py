@@ -6,8 +6,6 @@ from torch.cuda.amp.grad_scaler import GradScaler
 
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
-from tqdm.auto import tqdm
-
 from vae import VAE
 from utils import ELBO_Loss, Model_Args
 
@@ -51,7 +49,7 @@ class VAE_Trainer():
   def __restore_trainer(model_args: Model_Args):
 
     # Loading model from filesystem
-    data = torch.load(model_args.project_dir + "checkpoints/" + model_args.checkpoint_filename, weights_only=False)
+    data = torch.load(model_args.project_dir + "checkpoints/" + model_args.checkpoint_filename)
 
     vae = VAE.from_pretrained(data=data["vae"])
 
@@ -181,6 +179,7 @@ class VAE_Trainer():
         TextColumn("[progress.description]{task.description}"),
         BarColumn(bar_width=None),
         MofNCompleteColumn(),
+        TextColumn("•"),
         TextColumn("[bold cyan]AVG_LOSS: {task.fields[avg_loss]}"),
         TextColumn("[bold magenta]KL: {task.fields[kl]}"),
         TextColumn("[bold yellow]REC: {task.fields[rec]}"),

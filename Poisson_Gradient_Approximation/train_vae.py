@@ -24,7 +24,7 @@ def parse_args():
   parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
   parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
   parser.add_argument("--rescale", type=float, default=1e-2, help="RESCALE parameter")
-  parser.add_argument("--lambda_poisson", type=float, default=10, help="LAMBDA parameter")
+  parser.add_argument("--lam", type=float, default=10, help="LAMBDA parameter")
   parser.add_argument("--latent_dim", type=int, default=128, help="Dimension of the latent space")
 
   # Training - Hardware/Optimization
@@ -100,7 +100,7 @@ if __name__ == "__main__":
       train_loader=train_loader,
       create_optimizer=("AdamW", args.lr),
       gradient_clipping=args.clip,
-      LAMBDA=args.lambda_poisson,
+      LAMBDA=args.lam,
       RESCALE=args.rescale
     )
 
