@@ -8,7 +8,7 @@ from pathlib import Path
 from rich import print
 from rich.console import Console
 from rich.table import Table
-
+from decouple import config
 
 from utils import CustomDataset
 from vae import VAE
@@ -31,12 +31,19 @@ def parse_args():
   parser = argparse.ArgumentParser(description="VAE face generation script")
 
   # Path
-  parser.add_argument("--path", type=str, required=False, default="/home/schifano/Documents/Thesis/Poisson_Gradient_Approximation/archive/", help="Path to the images folder")
-  parser.add_argument("--project_dir", type=str, required=False, default="/home/schifano/Documents/Thesis/Poisson_Gradient_Approximation/", help="Path to the project folder")
+  parser.add_argument("--path", type=str, required=False,
+                      help="Path to images folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
+  parser.add_argument("--project_dir", type=str, required=False,
+                      help="Path to the project folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
+
+  # File handling
+  parser.add_argument("--vae_filename", type=str, required=False,
+                      help="Name of the generated VAE file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE.pt .")
+  parser.add_argument("--vae_checkpoint", type=str, required=False,
+                      help="Name of the generated training checkpoint file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE_checkpoint.pt .")
 
   # parameters
   parser.add_argument("--num_faces", type=int, required=False, default=32, help="Number of faces to generate")
-  parser.add_argument("--vae_filename", type=str, default="VAE.pt")
   parser.add_argument("--lambda_poisson", type=float, default=10, help="LAMBDA parameter")
   parser.add_argument("--title", type=str, default="", help="Title of the generated plot")
   parser.add_argument("--interpolation", action="store_true", default=True, help="Whether to interpolate images")
@@ -45,7 +52,13 @@ def parse_args():
   parser.add_argument("--start", type=int, default=700)
   parser.add_argument("--end", type=int, default=900)
 
-  return parser.parse_args()
+  args = parser.parse_args()
+  args.path = args.path or config("IMG_DIR", default=Path.cwd())
+  args.project_dir = args.project_dir or config("PROJECT_DIR", default=Path.cwd())
+
+  args.vae_filename = args.vae_filename or config("VAE_FILENAME", default="VAE.pt")
+  args.vae_checkpoint = args.vae_checkpoint or config("VAE_CHECKPOINT", default="VAE_checkpoint.pt")
+  return args
 
 def print_args(args):
   console = Console()
@@ -80,7 +93,7 @@ if __name__=="__main__":
     print(f"[bold red][ERROR]: [/bold red] Path {path} not found!")
     exit(1)
 
-  model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename="", project_dir=args.project_dir)
+  model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename="", project_dir=project_dir)
 
   vae = VAE.from_pretrained(model_args)
   device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -91,7 +104,7 @@ if __name__=="__main__":
 
   if args.interpolation:
     print("\n[bold cyan][INFO]: [/bold cyan] Generating interpolation image...")
-    train_set = CustomDataset.get_train_set(args.height, args.width, args.path)
+    train_set = CustomDataset.get_train_set(args.height, args.width, path)
 
     x0 = train_set[args.start][0][None].to(device)
     x1 = train_set[args.end][0][None].to(device)

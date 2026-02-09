@@ -49,7 +49,7 @@ class VAE_Trainer():
   def __restore_trainer(model_args: Model_Args):
 
     # Loading model from filesystem
-    data = torch.load(model_args.project_dir + "checkpoints/" + model_args.checkpoint_filename)
+    data = torch.load(model_args.project_dir / "checkpoints/" / model_args.checkpoint_filename)
 
     vae = VAE.from_pretrained(data=data["vae"])
 
@@ -130,7 +130,7 @@ class VAE_Trainer():
     }
 
     # Saving model on filesystem
-    torch.save(data, model_args.project_dir + "checkpoints/" + model_args.checkpoint_filename)
+    torch.save(data, model_args.project_dir / "checkpoints/" / model_args.checkpoint_filename)
 
   def explain_checkpoint(self):
     print("The current model has been trained for " + str(self.trained_epochs) + " epochs on " + str(
@@ -157,7 +157,7 @@ class VAE_Trainer():
       
       tmp_latents = self.vae.encode(tmp_img).to(self.__device)
 
-      # Tracing
+      # Tracing model to jit optimize it
       self.vae.train()
       self.vae.encoder = torch.jit.trace(self.vae.encoder, tmp_img)
       self.vae.decoder = torch.jit.trace(self.vae.decoder, tmp_latents)
@@ -170,20 +170,18 @@ class VAE_Trainer():
       "batch_reconstruction_error": "0"
     }
 
-    tot_loss = 0
-    num_batch = 0
-    batch_update_rate = 20
+    batch_update_rate = len(self.train_loader) // 100
     initial = self.trained_epochs
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(bar_width=None),
         MofNCompleteColumn(),
-        TextColumn("•"),
         TextColumn("[bold cyan]AVG_LOSS: {task.fields[avg_loss]}"),
         TextColumn("[bold magenta]KL: {task.fields[kl]}"),
         TextColumn("[bold yellow]REC: {task.fields[rec]}"),
         TimeElapsedColumn(),
+        TextColumn("<"),
         TimeRemainingColumn(),
         expand=True
     ) as progress:

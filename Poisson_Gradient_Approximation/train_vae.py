@@ -1,10 +1,12 @@
 import argparse
 
 from pathlib import Path
+
 from torchinfo import summary
 from rich import print
 from rich.console import Console
 from rich.table import Table
+from decouple import config
 
 from utils import CustomPoissonSampling, CustomDataset, ELBO_Loss, Model_Args
 from vae import VAE, VAE_Trainer
@@ -13,12 +15,14 @@ def parse_args():
   parser = argparse.ArgumentParser(description="VAE training script")
 
   # Path
-  parser.add_argument("--path", type=str, required=False, default="/home/schifano/Documents/Thesis/Poisson_Gradient_Approximation/archive/", help="Path to images folder")
-  parser.add_argument("--project_dir", type=str, required=False, default="/home/schifano/Documents/Thesis/Poisson_Gradient_Approximation/", help="Path to the project folder")
+  parser.add_argument("--path", type=str, required=False, help="Path to images folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
+  parser.add_argument("--project_dir", type=str, required=False, help="Path to the project folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
+
+  # File handling
+  parser.add_argument("--vae_filename", type=str, required=False, help="Name of the generated VAE file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE.pt .")
+  parser.add_argument("--vae_checkpoint", type=str, required=False, help="Name of the generated training checkpoint file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE_checkpoint.pt .")
 
   # Hyperparameters
-  parser.add_argument("--vae_filename", type=str, default="VAE.pt", help="Name of the generated VAE file")
-  parser.add_argument("--vae_checkpoint", type=str, default="VAE_checkpoint.pt", help="Name of the generated training checkpoint file")
   parser.add_argument("--height", type=int, default=64, help="Height of the image")
   parser.add_argument("--width", type=int, default=64, help="Width of the image")
   parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
@@ -34,7 +38,13 @@ def parse_args():
   parser.add_argument("--optimize", action="store_true", default=True, help="Enables JIT and AMP")
   parser.add_argument("--clip_gradients", action="store_false", default=False, dest="clip", help="Disables gradient clipping")
 
-  return parser.parse_args()
+  args = parser.parse_args()
+  args.path = args.path or config("IMG_DIR", default=Path.cwd())
+  args.project_dir = args.project_dir or config("PROJECT_DIR", default=Path.cwd())
+
+  args.vae_filename = args.vae_filename or config("VAE_FILENAME", default="VAE.pt")
+  args.vae_checkpoint = args.vae_checkpoint or config("VAE_CHECKPOINT", default="VAE_checkpoint.pt")
+  return args
 
 def print_args(args):
   console = Console()
@@ -57,24 +67,24 @@ if __name__ == "__main__":
   print_args(args)
 
   # Checking the existence of paths
-  project_dir = Path(args.project_dir)
   path = Path(args.path)
-
-  if not project_dir.exists():
-    print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
-    exit(1)
+  project_dir = Path(args.project_dir)
 
   if not path.exists():
     print(f"[bold red][ERROR]: [/bold red] Path {path} not found!")
     exit(1)
 
-  model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename=args.vae_checkpoint, project_dir=args.project_dir)
+  if not project_dir.exists():
+    print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
+    exit(1)
+
+  model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename=args.vae_checkpoint, project_dir=project_dir)
 
   train_loader, _ = CustomDataset.get_dataloaders(
     height = args.height,
     width = args.width,
     batch_size = args.batch_size,
-    path = args.path
+    path = path
   )
 
   elbo_loss = ELBO_Loss()

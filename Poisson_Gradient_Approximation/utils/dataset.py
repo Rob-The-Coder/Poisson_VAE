@@ -6,16 +6,16 @@ from PIL import Image
 from pathlib import Path
 
 class CustomDataset(torch.utils.data.Dataset):
-  def __init__(self, img_dir, img_names, transform=None):
+  def __init__(self, img_dir: Path, img_partition, transform=None):
     self.img_dir = img_dir
     self.transform = transform
-    self.img_names = img_names
+    self.img_partition = img_partition
 
   def __len__(self):
-    return len(self.img_names)
+    return len(self.img_partition)
 
   def __getitem__(self, idx):
-    img_path = Path(self.img_dir) / self.img_names[idx]
+    img_path = self.img_dir / self.img_partition[idx]
     image = Image.open(img_path).convert('RGB') # VAE expects 3 channels
     if self.transform:
       image = self.transform(image)
@@ -34,11 +34,11 @@ class CustomDataset(torch.utils.data.Dataset):
     return transform
 
   @staticmethod
-  def get_dataloaders(height, width, batch_size, path):
+  def get_dataloaders(height, width, batch_size, path: Path):
     transform = CustomDataset.__get_transform(height, width)
 
-    img_folder_path = Path(path) / "img_align_celeba" / "img_align_celeba"
-    partition_df = pd.read_csv(Path(path) / "list_eval_partition.csv")
+    img_folder_path = path / "img_align_celeba" / "img_align_celeba"
+    partition_df = pd.read_csv(path / "list_eval_partition.csv")
 
     train_partition = partition_df[partition_df['partition'] == 0]['image_id'].tolist()
     valid_partition = partition_df[partition_df['partition'] == 1]['image_id'].tolist()
@@ -53,11 +53,11 @@ class CustomDataset(torch.utils.data.Dataset):
     return train_loader, valid_loader
 
   @staticmethod
-  def get_train_set(height, width, path):
+  def get_train_set(height, width, path: Path):
     transform = CustomDataset.__get_transform(height, width)
 
-    img_folder_path = Path(path) / "img_align_celeba" / "img_align_celeba"
-    partition_df = pd.read_csv(Path(path) / "list_eval_partition.csv")
+    img_folder_path = path / "img_align_celeba" / "img_align_celeba"
+    partition_df = pd.read_csv(path / "list_eval_partition.csv")
 
     train_partition = partition_df[partition_df['partition']==0]['image_id'].tolist()
 

@@ -1,7 +1,10 @@
 import torch
 
+from pathlib import Path
 from typing import Optional
 from utils import Model_Args
+from vae import Encoder, Decoder
+
 
 class VAE(torch.nn.Module):
   def __init__(
@@ -11,7 +14,6 @@ class VAE(torch.nn.Module):
     latent_dim,
     sampling,
   ):
-    from vae import Encoder, Decoder
 
     super().__init__()
     self.__latent_dim = latent_dim
@@ -42,7 +44,7 @@ class VAE(torch.nn.Module):
 
     if model_args is not None:
       # Loading model from filesystem
-      data = torch.load(model_args.project_dir + "models/" + model_args.vae_filename)
+      data = torch.load(Path(model_args.project_dir) / "models/" / model_args.vae_filename, weights_only=False, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
     return VAE.__restore_vae(data)
 
@@ -77,7 +79,7 @@ class VAE(torch.nn.Module):
     }
 
     # Saving model on filesystem
-    torch.save(data, model_args.project_dir + "models/" + model_args.vae_filename)
+    torch.save(data, Path(model_args.project_dir) / "models/" / model_args.vae_filename)
 
     return data
 
