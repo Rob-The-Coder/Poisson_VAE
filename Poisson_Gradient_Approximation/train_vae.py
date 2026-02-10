@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.table import Table
 from decouple import config
 
-from utils import CustomPoissonSampling, CustomDataset, ELBO_Loss, Model_Args
+from utils import CustomPoissonSampling, CelebA, ELBO_Loss, Model_Args
 from vae import VAE, VAE_Trainer
 
 def parse_args():
@@ -19,8 +19,8 @@ def parse_args():
   parser.add_argument("--project_dir", type=str, required=False, help="Path to the project folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
 
   # File handling
-  parser.add_argument("--vae_filename", type=str, required=False, help="Name of the generated VAE file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE.pt .")
-  parser.add_argument("--vae_checkpoint", type=str, required=False, help="Name of the generated training checkpoint file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE_checkpoint.pt .")
+  parser.add_argument("--vae_filename", type=str, required=False, help="Name of the generated VAE file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE.pt")
+  parser.add_argument("--vae_checkpoint", type=str, required=False, help="Name of the generated training checkpoint file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE_checkpoint.pt")
 
   # Hyperparameters
   parser.add_argument("--height", type=int, default=64, help="Height of the image")
@@ -80,7 +80,7 @@ if __name__ == "__main__":
 
   model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename=args.vae_checkpoint, project_dir=project_dir)
 
-  train_loader, _ = CustomDataset.get_dataloaders(
+  train_loader, _ = CelebA.get_dataloaders(
     height = args.height,
     width = args.width,
     batch_size = args.batch_size,

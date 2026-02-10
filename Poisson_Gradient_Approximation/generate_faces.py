@@ -1,16 +1,19 @@
 import torch
+import numpy as np
 import matplotlib.pyplot as plt
 import torchvision
 import math
+import umap
 import argparse
 
 from pathlib import Path
+
 from rich import print
 from rich.console import Console
 from rich.table import Table
 from decouple import config
 
-from utils import CustomDataset
+from utils import CelebA
 from vae import VAE
 from utils import Model_Args
 
@@ -38,19 +41,24 @@ def parse_args():
 
   # File handling
   parser.add_argument("--vae_filename", type=str, required=False,
-                      help="Name of the generated VAE file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE.pt .")
+                      help="Name of the generated VAE file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE.pt")
   parser.add_argument("--vae_checkpoint", type=str, required=False,
-                      help="Name of the generated training checkpoint file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE_checkpoint.pt .")
+                      help="Name of the generated training checkpoint file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE_checkpoint.pt")
 
   # parameters
   parser.add_argument("--num_faces", type=int, required=False, default=32, help="Number of faces to generate")
   parser.add_argument("--lambda_poisson", type=float, default=10, help="LAMBDA parameter")
   parser.add_argument("--title", type=str, default="", help="Title of the generated plot")
+
   parser.add_argument("--interpolation", action="store_true", default=True, help="Whether to interpolate images")
-  parser.add_argument("--height", type=int, default=64)
-  parser.add_argument("--width", type=int, default=64)
-  parser.add_argument("--start", type=int, default=700)
-  parser.add_argument("--end", type=int, default=900)
+  parser.add_argument("--height", type=int, default=64, help="Height of the image")
+  parser.add_argument("--width", type=int, default=64, help="Width of the image")
+  parser.add_argument("--start", type=int, default=700, help="When --interpolation is set to true, this is the starting image")
+  parser.add_argument("--end", type=int, default=900, help="When --interpolation is set to true, this is the ending image")
+
+  parser.add_argument("--clusterization", action="store_true", default=True, help="Whether to compute clusterization")
+  parser.add_argument("--batch_size", type=int, default=512, help="Batch size")
+  parser.add_argument("--num_samples", type=int, default=5000, help="Sample number used to compute clusterization")
 
   args = parser.parse_args()
   args.path = args.path or config("IMG_DIR", default=Path.cwd())
@@ -72,7 +80,6 @@ def print_args(args):
     table.add_row(key, str(value))
 
   console.print(table)
-
 
 if __name__=="__main__":
   # Parsing args from command line
@@ -104,7 +111,7 @@ if __name__=="__main__":
 
   if args.interpolation:
     print("\n[bold cyan][INFO]: [/bold cyan] Generating interpolation image...")
-    train_set = CustomDataset.get_train_set(args.height, args.width, path)
+    train_set = CelebA.get_train_set(args.height, args.width, path)
 
     x0 = train_set[args.start][0][None].to(device)
     x1 = train_set[args.end][0][None].to(device)
@@ -116,3 +123,42 @@ if __name__=="__main__":
     z = (1 - beta) * z0 + beta * z1
     y = vae.decode(z)
     show_faces(y)
+
+  if args.clusterization:
+    vae.eval()
+    latents = []
+
+    attr_df = CelebA.get_attributes(path)
+
+    _, valid_loader = CelebA.get_dataloaders(
+      height=args.height,
+      width=args.width,
+      batch_size=args.batch_size,
+      path=path
+    )
+
+    # Computing the latents
+    with torch.no_grad():
+      for i, (batch, _) in enumerate(valid_loader):
+        z = vae.encode(batch.to(device))
+        latents.append(z.cpu().numpy())
+        if len(np.concatenate(latents)) >= args.num_samples:
+          break
+    z_combined = np.concatenate(latents)[:args.num_samples]
+
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    axes = axes.flatten()
+
+    # Computing embedding for all attributes
+    reducer = umap.UMAP(n_neighbors=15, min_dist=0.1)
+    embedding = reducer.fit_transform(z_combined)
+
+    attributes_to_test = ['Male', 'Smiling', 'Eyeglasses', 'Young']
+    for i, attr in enumerate(attributes_to_test):
+      labels = attr_df[attr].values[:args.num_samples]
+      sc = axes[i].scatter(embedding[:, 0], embedding[:, 1], c=labels, s=5, alpha=0.5, cmap='coolwarm')
+      axes[i].set_title(f"Attribute: {attr}")
+      plt.colorbar(sc, ax=axes[i])
+
+    plt.tight_layout()
+    plt.show()
