@@ -32,6 +32,7 @@ def parse_args():
   parser.add_argument("--latent_dim", type=int, default=128, help="Dimension of the latent space")
 
   # Training - Hardware/Optimization
+  parser.add_argument("--type", type=str, choices=["36M", "53M"], default="36M", help="Decide which version of the model to use")
   parser.add_argument("--resume", action="store_true", default=False, help="Resume training from checkpoint")
   parser.add_argument("--epochs_to_checkpoint", type=int, default=10, help="Number of epochs to create a checkpoint")
   parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train")
@@ -99,7 +100,7 @@ if __name__ == "__main__":
   else:
     print("\n[bold cyan][INFO]: [/bold cyan] Instantiating model and trainer...")
 
-    vae = VAE(height=args.height, width=args.width, latent_dim=args.latent_dim, sampling=CustomPoissonSampling.apply)
+    vae = VAE(height=args.height, width=args.width, latent_dim=args.latent_dim, sampling=CustomPoissonSampling.apply, model_type=args.type)
 
     print("\n[bold green][DEBUG]: [/bold green] Printing summary of model...")
     summary(vae, input_size=(train_loader.batch_size, 3, args.height, args.width))

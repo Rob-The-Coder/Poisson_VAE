@@ -82,7 +82,7 @@ class PixelShuffleBlock(torch.nn.Module):
   def forward(self, x):
     return self.prelu(self.shuffle(self.conv(x)))
 
-class Decoder(torch.nn.Module):
+class Decoder_53M(torch.nn.Module):
   def __init__(self, height, width, latent_features, num_res_blocks=8):
     super().__init__()
     self.height = height // 32
@@ -94,24 +94,24 @@ class Decoder(torch.nn.Module):
       torch.nn.PReLU(),
       torch.nn.Linear(latent_features, latent_features),
       torch.nn.PReLU(),                                   # mapping network
-      torch.nn.Linear(latent_features, 288),
-      torch.nn.LayerNorm(288),
+      torch.nn.Linear(latent_features, 384),
+      torch.nn.LayerNorm(384),
       torch.nn.PReLU(),
-      torch.nn.Linear(288, n * 288),
+      torch.nn.Linear(384, n * 384),
       torch.nn.PReLU()
     )
 
     # Low resolution residual blocks
     self.res_blocks = torch.nn.ModuleList([
-      StyleMBConvBlock(288, 288, latent_features) for _ in range(num_res_blocks)
+      StyleMBConvBlock(384, 384, latent_features) for _ in range(num_res_blocks)
     ])
 
     # Upsampling via PixelShuffle (4x4 -> 8x8 -> 16x16 -> 32x32 -> 64x64 -> 128x128)
-    self.up1 = PixelShuffleBlock(288, 288)
-    self.up2 = PixelShuffleBlock(288, 256)
-    self.up3 = PixelShuffleBlock(256, 128)
-    self.up4 = PixelShuffleBlock(128, 64)
-    self.up5 = PixelShuffleBlock(64, 32)
+    self.up1 = PixelShuffleBlock(384, 256)
+    self.up2 = PixelShuffleBlock(256, 128)
+    self.up3 = PixelShuffleBlock(128, 64)
+    self.up4 = PixelShuffleBlock(64, 32)
+    self.up5 = PixelShuffleBlock(32, 32)
 
     self.final_conv = torch.nn.Conv2d(32, 3, kernel_size=3, padding=1)
 

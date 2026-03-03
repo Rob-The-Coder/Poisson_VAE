@@ -3,8 +3,7 @@ import torch
 from pathlib import Path
 from typing import Optional
 from utils import Model_Args
-from vae import Encoder, Decoder
-
+from vae import Encoder_36M, Decoder_36M, Encoder_53M, Decoder_53M
 
 class VAE(torch.nn.Module):
   def __init__(
@@ -13,20 +12,30 @@ class VAE(torch.nn.Module):
     width,
     latent_dim,
     sampling,
+    model_type: str = "36M"
   ):
-
     super().__init__()
     self.__latent_dim = latent_dim
     self.__height = height
     self.__width = width
 
-    self.encoder = Encoder(height, width, latent_dim)
-    self.decoder = Decoder(height, width, latent_dim)
+    self.__model_type = model_type
+    if self.__model_type == '36M':
+      self.encoder = Encoder_36M(height, width, latent_dim)
+      self.decoder = Decoder_36M(height, width, latent_dim)
+    elif self.__model_type == '53M':
+      self.encoder = Encoder_53M(height, width, latent_dim)
+      self.decoder = Decoder_53M(height, width, latent_dim)
+
     self.__sampling = sampling
 
   @staticmethod
   def __restore_vae(data):
-    vae = VAE(data["height"], data["width"], data["latent_dim"], data["sampling"])
+    if "type" in data:
+      vae = VAE(data["height"], data["width"], data["latent_dim"], data["sampling"], data["type"])
+    else:
+      vae = VAE(data["height"], data["width"], data["latent_dim"], data["sampling"])
+
     vae.load_state_dict(data["params"])
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -44,7 +53,7 @@ class VAE(torch.nn.Module):
 
     if model_args is not None:
       # Loading model from filesystem
-      data = torch.load(Path(model_args.project_dir) / "models/" / model_args.vae_filename, weights_only=False, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+      data = torch.load(Path(model_args.project_dir) / "models/" / model_args.vae_filename)
 
     return VAE.__restore_vae(data)
 
@@ -75,7 +84,8 @@ class VAE(torch.nn.Module):
       "height": self.__height,
       "width": self.__width,
       "latent_dim": self.__latent_dim,
-      "sampling": self.__sampling
+      "sampling": self.__sampling,
+      "type": self.__model_type
     }
 
     # Saving model on filesystem
