@@ -6,12 +6,11 @@ import math
 import umap
 import argparse
 
-from pathlib import Path
-
 from rich import print
 from rich.console import Console
 from rich.table import Table
 from decouple import config
+from pathlib import Path
 
 from utils import CelebA
 from vae import VAE
@@ -46,19 +45,19 @@ def parse_args():
                       help="Name of the generated training checkpoint file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE_checkpoint.pt")
 
   # parameters
-  parser.add_argument("--num_faces", type=int, required=False, default=32, help="Number of faces to generate")
-  parser.add_argument("--lambda_poisson", type=float, default=10, help="LAMBDA parameter")
-  parser.add_argument("--title", type=str, default="", help="Title of the generated plot")
+  parser.add_argument("--num_faces", type=int, required=False, default=36, help="Number of faces to generate. Defaults to 36")
+  parser.add_argument("--lambda_poisson", type=float, default=10, help="LAMBDA parameter. Defaults to 10")
+  parser.add_argument("--title", type=str, default="", help="Title of the generated plot. By default is set to a blank string")
 
-  parser.add_argument("--interpolation", action="store_true", default=True, help="Whether to interpolate images")
-  parser.add_argument("--height", type=int, default=64, help="Height of the image")
-  parser.add_argument("--width", type=int, default=64, help="Width of the image")
-  parser.add_argument("--start", type=int, default=700, help="When --interpolation is set to true, this is the starting image")
-  parser.add_argument("--end", type=int, default=900, help="When --interpolation is set to true, this is the ending image")
+  parser.add_argument("--interpolation", action="store_true", default=True, help="Whether to interpolate images. Defaults to True")
+  parser.add_argument("--height", type=int, default=64, help="Height of the image. Defaults to 64")
+  parser.add_argument("--width", type=int, default=64, help="Width of the image. Defaults to 64")
+  parser.add_argument("--start", type=int, default=700, help="When --interpolation is set to true, this is the starting image. Defaults to 700")
+  parser.add_argument("--end", type=int, default=900, help="When --interpolation is set to true, this is the ending image. Defaults to 900")
 
-  parser.add_argument("--clusterization", action="store_true", default=True, help="Whether to compute clusterization")
-  parser.add_argument("--batch_size", type=int, default=512, help="Batch size")
-  parser.add_argument("--num_samples", type=int, default=5000, help="Sample number used to compute clusterization")
+  parser.add_argument("--clusterization", action="store_true", default=True, help="Whether to compute clusterization. Defaults to True")
+  parser.add_argument("--batch_size", type=int, default=512, help="Batch size. Defaults to 512")
+  parser.add_argument("--num_samples", type=int, default=5000, help="Sample number used to compute clusterization. Defaults to 5000")
 
   args = parser.parse_args()
   args.path = args.path or config("IMG_DIR", default=Path.cwd())

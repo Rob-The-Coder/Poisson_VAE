@@ -19,13 +19,18 @@ class VAE(torch.nn.Module):
     self.__height = height
     self.__width = width
 
+    # Instantiating correct model type
     self.__model_type = model_type
-    if self.__model_type == '36M':
-      self.encoder = Encoder_36M(height, width, latent_dim)
-      self.decoder = Decoder_36M(height, width, latent_dim)
-    elif self.__model_type == '53M':
-      self.encoder = Encoder_53M(height, width, latent_dim)
-      self.decoder = Decoder_53M(height, width, latent_dim)
+    MODEL_MAP = {
+      "36M": (Encoder_36M(height, width, latent_dim), Decoder_36M(height, width, latent_dim)),
+      "53M": (Encoder_53M(height, width, latent_dim), Decoder_53M(height, width, latent_dim)),
+    }
+    if self.__model_type not in MODEL_MAP:
+      supported = ", ".join(MODEL_MAP.keys())
+      raise ValueError(
+        f"Unsupported optimizer '{self.__model_type}'. Supported: {supported}"
+      )
+    self.encoder, self.decoder = MODEL_MAP[self.__model_type]
 
     self.__sampling = sampling
 

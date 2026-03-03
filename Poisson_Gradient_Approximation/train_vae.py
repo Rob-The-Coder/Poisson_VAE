@@ -1,12 +1,11 @@
 import argparse
 
-from pathlib import Path
-
 from torchinfo import summary
 from rich import print
 from rich.console import Console
 from rich.table import Table
 from decouple import config
+from pathlib import Path
 
 from utils import CustomPoissonSampling, CelebA, ELBO_Loss, Model_Args
 from vae import VAE, VAE_Trainer
@@ -23,21 +22,21 @@ def parse_args():
   parser.add_argument("--vae_checkpoint", type=str, required=False, help="Name of the generated training checkpoint file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE_checkpoint.pt")
 
   # Hyperparameters
-  parser.add_argument("--height", type=int, default=64, help="Height of the image")
-  parser.add_argument("--width", type=int, default=64, help="Width of the image")
-  parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
-  parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
-  parser.add_argument("--rescale", type=float, default=1e-2, help="RESCALE parameter")
-  parser.add_argument("--lam", type=float, default=10, help="LAMBDA parameter")
-  parser.add_argument("--latent_dim", type=int, default=128, help="Dimension of the latent space")
+  parser.add_argument("--height", type=int, default=64, help="Height of the image. Defaults to 64")
+  parser.add_argument("--width", type=int, default=64, help="Width of the image. Defaults to 64")
+  parser.add_argument("--batch_size", type=int, default=128, help="Batch size. Defaults to 128")
+  parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate. Defaults to 1e-4")
+  parser.add_argument("--rescale", type=float, default=1e-2, help="RESCALE parameter. Defaults to 1e-2")
+  parser.add_argument("--lam", type=float, default=10, help="LAMBDA parameter. Defaults to 10")
+  parser.add_argument("--latent_dim", type=int, default=128, help="Dimension of the latent space. Defaults to 128")
 
   # Training - Hardware/Optimization
-  parser.add_argument("--type", type=str, choices=["36M", "53M"], default="36M", help="Decide which version of the model to use")
-  parser.add_argument("--resume", action="store_true", default=False, help="Resume training from checkpoint")
-  parser.add_argument("--epochs_to_checkpoint", type=int, default=10, help="Number of epochs to create a checkpoint")
-  parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train")
-  parser.add_argument("--optimize", action="store_true", default=True, help="Enables JIT and AMP")
-  parser.add_argument("--clip_gradients", action="store_false", default=False, dest="clip", help="Disables gradient clipping")
+  parser.add_argument("--type", type=str, choices=["36M", "53M"], default="36M", help="Decide which version of the model to use. Defaults to 36M")
+  parser.add_argument("--resume", action="store_true", default=False, help="Resume training from checkpoint. If not used defaults to False")
+  parser.add_argument("--epochs_to_checkpoint", type=int, default=10, help="Number of epochs to create a checkpoint. Defaults to 10")
+  parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train. Defaults to 100")
+  parser.add_argument("--optimize", action="store_true", default=True, help="Enables JIT and AMP. Defaults to True. Use --optimize False to disable")
+  parser.add_argument("--clip_gradients", action="store_false", default=False, dest="clip", help="Enables gradient clipping. Defaults to False, use --clip_gradients True to enable")
 
   args = parser.parse_args()
   args.path = args.path or config("IMG_DIR", default=Path.cwd())
