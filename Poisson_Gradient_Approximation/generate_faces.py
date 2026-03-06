@@ -56,7 +56,7 @@ def parse_args():
   parser.add_argument("--end", type=int, default=900, help="When --interpolation is set to true, this is the ending image. Defaults to 900")
 
   parser.add_argument("--clusterization", action="store_true", default=True, help="Whether to compute clusterization. Defaults to True")
-  parser.add_argument("--batch_size", type=int, default=512, help="Batch size. Defaults to 512")
+  parser.add_argument("--batch_size", type=int, default=512, help="Batch size used to compute clusters. Defaults to 512")
   parser.add_argument("--num_samples", type=int, default=5000, help="Sample number used to compute clusterization. Defaults to 5000")
 
   args = parser.parse_args()

@@ -32,6 +32,7 @@ def parse_args():
 
   # Training - Hardware/Optimization
   parser.add_argument("--type", type=str, choices=["36M", "53M"], default="36M", help="Decide which version of the model to use. Defaults to 36M")
+  parser.add_argument("--optimizer", type=str, choices=["AdamW", "Adam", "SGD"], default="AdamW", help="Decide which type of optimizer to use. Defaults to AdamW")
   parser.add_argument("--resume", action="store_true", default=False, help="Resume training from checkpoint. If not used defaults to False")
   parser.add_argument("--epochs_to_checkpoint", type=int, default=10, help="Number of epochs to create a checkpoint. Defaults to 10")
   parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train. Defaults to 100")
@@ -108,7 +109,7 @@ if __name__ == "__main__":
       vae=vae,
       loss_function=elbo_loss,
       train_loader=train_loader,
-      create_optimizer=("AdamW", args.lr),
+      create_optimizer=(args.optimizer, args.lr),
       gradient_clipping=args.clip,
       LAMBDA=args.lam,
       RESCALE=args.rescale
