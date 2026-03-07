@@ -1,39 +1,8 @@
-import argparse
 import streamlit as st
+import subprocess
 
-from torchinfo import summary
-from rich import print
-from rich.console import Console
-from rich.table import Table
 from decouple import config
 from pathlib import Path
-
-from utils import CustomPoissonSampling, CelebA, ELBO_Loss, Model_Args
-from vae import VAE, VAE_Trainer
-
-def parse_args():
-  parser = argparse.ArgumentParser(description="VAE training script")
-
-  args = parser.parse_args()
-  args.path = args.path or config("IMG_DIR", default=Path.cwd())
-  args.project_dir = args.project_dir or config("PROJECT_DIR", default=Path.cwd())
-
-  args.vae_filename = args.vae_filename or config("VAE_FILENAME", default="VAE.pt")
-  args.vae_checkpoint = args.vae_checkpoint or config("VAE_CHECKPOINT", default="VAE_checkpoint.pt")
-  return args
-
-def print_args(args):
-  console = Console()
-
-  table = Table(title="VAE Training Configuration")
-
-  table.add_column("Parameter", style="cyan")
-  table.add_column("Value", style="magenta")
-
-  for key, value in vars(args).items():
-    table.add_row(key, str(value))
-
-  console.print(table)
 
 if __name__ == "__main__":
   if 'training_queue' not in st.session_state:
@@ -117,7 +86,7 @@ if __name__ == "__main__":
         "Learning rate": lr,
         "Rescale parameter": rescale,
         "Lambda parameter": lam,
-        "latent space dimension": latent_dim,
+        "Latent space dimension": latent_dim,
         "Model type": model_type,
         "Optimizer": optimizer,
         "Training epochs": epochs,
@@ -139,7 +108,25 @@ if __name__ == "__main__":
         st.markdown(markdown, width="stretch")
 
       if st.button("START TRAINING", type="primary", width="stretch"):
-        for i, config in enumerate(st.session_state.training_queue):
-          st.info(f"Executing job {i + 1}/{len(st.session_state.training_queue)}...")
+        st.info(f"Executing jobs")
 
-          st.success(f"Job {i + 1} completed!")
+        command=f""
+        for i, config in enumerate(st.session_state.training_queue):
+          command += (f"python3 train_vae.py --path '{config['Image folder path']}' --project_dir '{config['Project directory']}' "
+                    f"--vae_filename '{config['VAE filename']}' --vae_checkpoint '{config['VAE checkpoint']}' --height {config['Height']} "
+                    f"--width {config['Width']} --batch_size {config['Batch size']} --lr {config['Learning rate']} --rescale {config['Rescale parameter']} "
+                    f"--lam {config['Lambda parameter']} --latent_dim {config['Latent space dimension']} --type '{config['Model type']}' "
+                    f"--optimizer '{config['Optimizer']}' --epochs_to_checkpoint {config['Epochs to checkpoint']} "
+                    f"--epochs {config['Training epochs']} ")
+
+          if not config['Use optimization']:
+            command += "--optimize False "
+          if config['Resume training']:
+            command += "--resume "
+          if clip_gradients:
+            command += "--clip_gradients True "
+
+          command += ";"
+
+        print(command)
+        subprocess.Popen(command, shell=True)
