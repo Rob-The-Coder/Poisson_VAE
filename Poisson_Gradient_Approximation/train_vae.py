@@ -14,7 +14,7 @@ def parse_args():
   parser = argparse.ArgumentParser(description="VAE training script")
 
   # Path
-  parser.add_argument("--path", type=str, required=False, help="Path to images folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
+  parser.add_argument("--images_dir", type=str, required=False, help="Path to images folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
   parser.add_argument("--project_dir", type=str, required=False, help="Path to the project folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
 
   # File handling
@@ -36,11 +36,11 @@ def parse_args():
   parser.add_argument("--resume", action="store_true", default=False, help="Resume training from checkpoint. If not used defaults to False")
   parser.add_argument("--epochs_to_checkpoint", type=int, default=10, help="Number of epochs to create a checkpoint. Defaults to 10")
   parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train. Defaults to 100")
-  parser.add_argument("--optimize", action="store_true", default=True, help="Enables JIT and AMP. Defaults to True. Use --optimize False to disable")
+  parser.add_argument("--optimize", type=bool, default=True, help="Enables JIT and AMP. Defaults to True. Use --optimize False to disable")
   parser.add_argument("--clip_gradients", action="store_false", default=False, dest="clip", help="Enables gradient clipping. Defaults to False, use --clip_gradients True to enable")
 
   args = parser.parse_args()
-  args.path = args.path or config("IMG_DIR", default=Path.cwd())
+  args.images_dir = args.images_dir or config("IMG_DIR", default=Path.cwd())
   args.project_dir = args.project_dir or config("PROJECT_DIR", default=Path.cwd())
 
   args.vae_filename = args.vae_filename or config("VAE_FILENAME", default="VAE.pt")
@@ -68,11 +68,11 @@ if __name__ == "__main__":
   print_args(args)
 
   # Checking the existence of paths
-  path = Path(args.path)
+  images_dir = Path(args.images_dir)
   project_dir = Path(args.project_dir)
 
-  if not path.exists():
-    print(f"[bold red][ERROR]: [/bold red] Path {path} not found!")
+  if not images_dir.exists():
+    print(f"[bold red][ERROR]: [/bold red] Path {images_dir} not found!")
     exit(1)
 
   if not project_dir.exists():
@@ -82,10 +82,10 @@ if __name__ == "__main__":
   model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename=args.vae_checkpoint, project_dir=project_dir)
 
   train_loader, _ = CelebA.get_dataloaders(
-    height = args.height,
-    width = args.width,
-    batch_size = args.batch_size,
-    path = path
+    height=args.height,
+    width=args.width,
+    batch_size=args.batch_size,
+    images_dir=images_dir
   )
 
   elbo_loss = ELBO_Loss()

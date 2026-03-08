@@ -33,34 +33,30 @@ def parse_args():
   parser = argparse.ArgumentParser(description="VAE face generation script")
 
   # Path
-  parser.add_argument("--path", type=str, required=False,
-                      help="Path to images folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
-  parser.add_argument("--project_dir", type=str, required=False,
-                      help="Path to the project folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
+  parser.add_argument("--images_dir", type=str, required=False, help="Path to images folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
+  parser.add_argument("--project_dir", type=str, required=False, help="Path to the project folder, if not specified will use the directory specified in the .env file. If both are not specified it will default to the current directory")
 
   # File handling
-  parser.add_argument("--vae_filename", type=str, required=False,
-                      help="Name of the generated VAE file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE.pt")
-  parser.add_argument("--vae_checkpoint", type=str, required=False,
-                      help="Name of the generated training checkpoint file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE_checkpoint.pt")
+  parser.add_argument("--vae_filename", type=str, required=False, help="Name of the generated VAE file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE.pt")
+  parser.add_argument("--vae_checkpoint", type=str, required=False, help="Name of the generated training checkpoint file. if not specified will use the name specified in the .env file. If both are not specified it will default to VAE_checkpoint.pt")
 
   # parameters
   parser.add_argument("--num_faces", type=int, required=False, default=36, help="Number of faces to generate. Defaults to 36")
-  parser.add_argument("--lambda_poisson", type=float, default=10, help="LAMBDA parameter. Defaults to 10")
+  parser.add_argument("--lam", type=float, default=10, help="LAMBDA parameter. Defaults to 10")
   parser.add_argument("--title", type=str, default="", help="Title of the generated plot. By default is set to a blank string")
 
-  parser.add_argument("--interpolation", action="store_true", default=True, help="Whether to interpolate images. Defaults to True")
+  parser.add_argument("--interpolation", type=bool, default=True, help="Whether to interpolate images. Defaults to True")
   parser.add_argument("--height", type=int, default=64, help="Height of the image. Defaults to 64")
   parser.add_argument("--width", type=int, default=64, help="Width of the image. Defaults to 64")
   parser.add_argument("--start", type=int, default=700, help="When --interpolation is set to true, this is the starting image. Defaults to 700")
   parser.add_argument("--end", type=int, default=900, help="When --interpolation is set to true, this is the ending image. Defaults to 900")
 
-  parser.add_argument("--clusterization", action="store_true", default=True, help="Whether to compute clusterization. Defaults to True")
+  parser.add_argument("--clusterization", type=bool, default=True, help="Whether to compute clusterization. Defaults to True")
   parser.add_argument("--batch_size", type=int, default=512, help="Batch size used to compute clusters. Defaults to 512")
-  parser.add_argument("--num_samples", type=int, default=5000, help="Sample number used to compute clusterization. Defaults to 5000")
+  parser.add_argument("--num_samples", type=int, default=5000, help="Samples number used to compute clusterization. Defaults to 5000")
 
   args = parser.parse_args()
-  args.path = args.path or config("IMG_DIR", default=Path.cwd())
+  args.images_dir = args.images_dir or config("IMG_DIR", default=Path.cwd())
   args.project_dir = args.project_dir or config("PROJECT_DIR", default=Path.cwd())
 
   args.vae_filename = args.vae_filename or config("VAE_FILENAME", default="VAE.pt")
@@ -89,14 +85,14 @@ if __name__=="__main__":
 
   # Checking the existence of paths
   project_dir = Path(args.project_dir)
-  path = Path(args.path)
+  images_dir = Path(args.images_dir)
 
   if not project_dir.exists():
     print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
     exit(1)
 
-  if not path.exists():
-    print(f"[bold red][ERROR]: [/bold red] Path {path} not found!")
+  if not images_dir.exists():
+    print(f"[bold red][ERROR]: [/bold red] Path {images_dir} not found!")
     exit(1)
 
   model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename="", project_dir=project_dir)
@@ -105,12 +101,12 @@ if __name__=="__main__":
   device = "cuda" if torch.cuda.is_available() else "cpu"
 
   print("\n[bold cyan][INFO]: [/bold cyan] Generating faces...")
-  faces = vae.generate_faces(num_faces=args.num_faces, LAMBDA=args.lambda_poisson, device=device)
+  faces = vae.generate_faces(num_faces=args.num_faces, LAMBDA=args.lam, device=device)
   show_faces(faces, args.title)
 
   if args.interpolation:
     print("\n[bold cyan][INFO]: [/bold cyan] Generating interpolation image...")
-    train_set = CelebA.get_train_set(args.height, args.width, path)
+    train_set = CelebA.get_train_set(args.height, args.width, images_dir)
 
     x0 = train_set[args.start][0][None].to(device)
     x1 = train_set[args.end][0][None].to(device)
@@ -127,13 +123,13 @@ if __name__=="__main__":
     vae.eval()
     latents = []
 
-    attr_df = CelebA.get_attributes(path)
+    attr_df = CelebA.get_attributes(images_dir)
 
     _, valid_loader = CelebA.get_dataloaders(
       height=args.height,
       width=args.width,
       batch_size=args.batch_size,
-      path=path
+      images_dir=images_dir
     )
 
     # Computing the latents

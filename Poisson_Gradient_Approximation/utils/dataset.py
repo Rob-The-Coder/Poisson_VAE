@@ -58,11 +58,11 @@ class CelebA(CustomDataset):
     return transform
 
   @staticmethod
-  def get_dataloaders(height, width, batch_size, path: Path):
+  def get_dataloaders(height, width, batch_size, images_dir: Path):
     transform = CelebA.get_transform(height, width)
 
-    img_folder_path = path / "img_align_celeba" / "img_align_celeba"
-    partition_df = pd.read_csv(path / "list_eval_partition.csv")
+    img_folder_path = images_dir / "img_align_celeba" / "img_align_celeba"
+    partition_df = pd.read_csv(images_dir / "list_eval_partition.csv")
 
     train_partition = partition_df[partition_df['partition']==0]['image_id'].tolist()
     valid_partition = partition_df[partition_df['partition']==1]['image_id'].tolist()
