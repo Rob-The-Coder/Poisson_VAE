@@ -11,23 +11,122 @@ from rich.console import Console
 from rich.table import Table
 from decouple import config
 from pathlib import Path
+from dataclasses import dataclass
 
 from utils import CelebA
 from vae import VAE
 from utils import Model_Args
 
-def show_faces(faces, title: str = ""):
+@dataclass
+class GenerationArgs:
+  images_dir: str
+  project_dir: str
+  vae_filename: str
+  num_faces: int = 36
+  lam: int = 10
+  title: str = ""
+  interpolation: bool = True
+  height: int = 64
+  width: int = 64
+  start: int = 6000
+  end: int = 80000
+  clusterization: bool = True
+  batch_size: int = 512
+  num_samples: int = 5000
+
+def get_faces(faces, title: str = ""):
   plt.rcParams['figure.dpi'] = 200
+  fig, ax = plt.subplots()
 
   nrow = 8
   if faces.size()[0] > 8:
-    nrow = math.isqrt(faces.size()[0]-1) + 1
+    nrow = math.isqrt(faces.size()[0] - 1) + 1
 
   g = torchvision.utils.make_grid(faces, nrow=nrow, normalize=True, value_range=(-1, 1))
-  plt.imshow(g.permute(1, 2, 0).detach().cpu().numpy())
-  plt.axis("off")
-  plt.title(title, fontsize=10)
-  plt.show()
+  ax.imshow(g.permute(1, 2, 0).detach().cpu().numpy())
+  ax.axis("off")
+  ax.set_title(title, fontsize=10)
+  return fig
+
+def generate(args_dict: GenerationArgs):
+  figures = []
+  device = "cuda" if torch.cuda.is_available() else "cpu"
+
+  # Checking the existence of paths
+  project_dir = Path(args_dict.project_dir)
+  images_dir = Path(args_dict.images_dir)
+
+  if not project_dir.exists():
+    print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
+    exit(1)
+
+  if not images_dir.exists():
+    print(f"[bold red][ERROR]: [/bold red] Path {images_dir} not found!")
+    exit(1)
+
+  model_args = Model_Args(vae_filename=args_dict.vae_filename, checkpoint_filename="", project_dir=project_dir)
+  vae = VAE.from_pretrained(model_args)
+  vae.eval()
+
+  print("\n[bold cyan][INFO]: [/bold cyan] Generating faces...")
+  faces = vae.generate_faces(num_faces=args_dict.num_faces, LAMBDA=args_dict.lam, device=device)
+  figures.append(get_faces(faces, args_dict.title))
+
+  if args_dict.interpolation:
+    print("\n[bold cyan][INFO]: [/bold cyan] Generating interpolation image...")
+    train_set = CelebA.get_train_set(args_dict.height, args_dict.width, images_dir)
+
+    x0 = train_set[args_dict.start][0][None].to(device)
+    x1 = train_set[args_dict.end][0][None].to(device)
+
+    z0 = vae.encode(x0)
+    z1 = vae.encode(x1)
+    beta = torch.linspace(0, 1, 8, device=device).view(-1, 1)
+
+    z = (1 - beta) * z0 + beta * z1
+    y = vae.decode(z)
+    figures.append(get_faces(y, "Interpolation"))
+
+  if args_dict.clusterization:
+    vae.eval()
+    latents = []
+
+    attr_df = CelebA.get_attributes(images_dir)
+
+    _, valid_loader = CelebA.get_dataloaders(
+      height=args_dict.height,
+      width=args_dict.width,
+      batch_size=args_dict.batch_size,
+      images_dir=images_dir
+    )
+
+    # Computing the latents
+    with torch.no_grad():
+      for i, (batch, _) in enumerate(valid_loader):
+        z = vae.encode(batch.to(device))
+        latents.append(z.cpu().numpy())
+        if len(np.concatenate(latents)) >= args_dict.num_samples:
+          break
+    z_combined = np.concatenate(latents)[:args_dict.num_samples]
+
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    axes = axes.flatten()
+
+    # Computing embedding for all attributes
+    reducer = umap.UMAP(n_neighbors=15, min_dist=0.1)
+    embedding = reducer.fit_transform(z_combined)
+
+    attributes_to_test = ['Male', 'Smiling', 'Eyeglasses', 'Young']
+    for i, attr in enumerate(attributes_to_test):
+      labels = attr_df[attr].values[:args_dict.num_samples]
+      sc = axes[i].scatter(embedding[:, 0], embedding[:, 1], c=labels, s=5, alpha=0.5, cmap='coolwarm')
+      axes[i].set_title(f"Attribute: {attr}")
+      plt.colorbar(sc, ax=axes[i])
+
+    plt.tight_layout()
+    figures.append(fig)
+
+  return figures
 
 def parse_args():
   parser = argparse.ArgumentParser(description="VAE face generation script")
@@ -48,8 +147,8 @@ def parse_args():
   parser.add_argument("--interpolation", type=bool, default=True, help="Whether to interpolate images. Defaults to True")
   parser.add_argument("--height", type=int, default=64, help="Height of the image. Defaults to 64")
   parser.add_argument("--width", type=int, default=64, help="Width of the image. Defaults to 64")
-  parser.add_argument("--start", type=int, default=700, help="When --interpolation is set to true, this is the starting image. Defaults to 700")
-  parser.add_argument("--end", type=int, default=900, help="When --interpolation is set to true, this is the ending image. Defaults to 900")
+  parser.add_argument("--start", type=int, default=700, help="When --interpolation is set to true, this is the starting image. Defaults to 6000")
+  parser.add_argument("--end", type=int, default=900, help="When --interpolation is set to true, this is the ending image. Defaults to 80000")
 
   parser.add_argument("--clusterization", type=bool, default=True, help="Whether to compute clusterization. Defaults to True")
   parser.add_argument("--batch_size", type=int, default=512, help="Batch size used to compute clusters. Defaults to 512")
@@ -83,77 +182,8 @@ if __name__=="__main__":
   # Printing args
   print_args(args)
 
-  # Checking the existence of paths
-  project_dir = Path(args.project_dir)
-  images_dir = Path(args.images_dir)
+  gen_args = GenerationArgs(**{k: v for k, v in vars(args).items() if k in GenerationArgs.__dataclass_fields__})
+  figs = generate(gen_args)
 
-  if not project_dir.exists():
-    print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
-    exit(1)
-
-  if not images_dir.exists():
-    print(f"[bold red][ERROR]: [/bold red] Path {images_dir} not found!")
-    exit(1)
-
-  model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename="", project_dir=project_dir)
-
-  vae = VAE.from_pretrained(model_args)
-  device = "cuda" if torch.cuda.is_available() else "cpu"
-
-  print("\n[bold cyan][INFO]: [/bold cyan] Generating faces...")
-  faces = vae.generate_faces(num_faces=args.num_faces, LAMBDA=args.lam, device=device)
-  show_faces(faces, args.title)
-
-  if args.interpolation:
-    print("\n[bold cyan][INFO]: [/bold cyan] Generating interpolation image...")
-    train_set = CelebA.get_train_set(args.height, args.width, images_dir)
-
-    x0 = train_set[args.start][0][None].to(device)
-    x1 = train_set[args.end][0][None].to(device)
-
-    z0 = vae.encode(x0)
-    z1 = vae.encode(x1)
-    beta = torch.linspace(0, 1, 8, device=device).view(-1, 1)
-
-    z = (1 - beta) * z0 + beta * z1
-    y = vae.decode(z)
-    show_faces(y)
-
-  if args.clusterization:
-    vae.eval()
-    latents = []
-
-    attr_df = CelebA.get_attributes(images_dir)
-
-    _, valid_loader = CelebA.get_dataloaders(
-      height=args.height,
-      width=args.width,
-      batch_size=args.batch_size,
-      images_dir=images_dir
-    )
-
-    # Computing the latents
-    with torch.no_grad():
-      for i, (batch, _) in enumerate(valid_loader):
-        z = vae.encode(batch.to(device))
-        latents.append(z.cpu().numpy())
-        if len(np.concatenate(latents)) >= args.num_samples:
-          break
-    z_combined = np.concatenate(latents)[:args.num_samples]
-
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-    axes = axes.flatten()
-
-    # Computing embedding for all attributes
-    reducer = umap.UMAP(n_neighbors=15, min_dist=0.1)
-    embedding = reducer.fit_transform(z_combined)
-
-    attributes_to_test = ['Male', 'Smiling', 'Eyeglasses', 'Young']
-    for i, attr in enumerate(attributes_to_test):
-      labels = attr_df[attr].values[:args.num_samples]
-      sc = axes[i].scatter(embedding[:, 0], embedding[:, 1], c=labels, s=5, alpha=0.5, cmap='coolwarm')
-      axes[i].set_title(f"Attribute: {attr}")
-      plt.colorbar(sc, ax=axes[i])
-
-    plt.tight_layout()
-    plt.show()
+  for f in figs:
+    f.show()
