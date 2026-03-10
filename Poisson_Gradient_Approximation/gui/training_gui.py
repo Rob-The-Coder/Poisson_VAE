@@ -110,6 +110,7 @@ with st.container(border=True):
         "Optimizer": optimizer,
         "Training epochs": epochs,
         "Epochs to checkpoint": epochs_to_checkpoint,
+        "Epochs to monitor": epochs_to_monitor
       })
 
 if st.session_state.training_queue:
@@ -138,7 +139,7 @@ if st.session_state.training_queue:
                   f"--vae_filename '{config['VAE filename']}' --vae_checkpoint '{config['VAE checkpoint']}' --height {config['Height']} "
                   f"--width {config['Width']} --batch_size {config['Batch size']} --lr {config['Learning rate']} --rescale {config['Rescale parameter']} "
                   f"--lam {config['Lambda parameter']} --latent_dim {config['Latent space dimension']} --type '{config['Model type']}' "
-                  f"--optimizer '{config['Optimizer']}' --epochs_to_checkpoint {config['Epochs to checkpoint']} "
+                  f"--optimizer '{config['Optimizer']}' --epochs_to_checkpoint {config['Epochs to checkpoint']} --epochs_to_monitor {config['Epochs to monitor']} "
                   f"--epochs {config['Training epochs']} ")
 
         if not config['Use optimization']:

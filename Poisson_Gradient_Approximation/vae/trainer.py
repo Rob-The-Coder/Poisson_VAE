@@ -8,7 +8,6 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeEl
 
 from vae import VAE
 from utils import ELBO_Loss, Model_Args
-from generate_faces import get_faces
 
 class VAE_Trainer():
   def __init__(
@@ -140,7 +139,9 @@ class VAE_Trainer():
       self.RESCALE) + "\nGRADIENT_CLIPPING: " + str(self.gradient_clipping))
 
   def monitor(self, model_args: Model_Args, metrics_history: list[dict], epoch: int):
-    monitor_path = model_args.project_dir / "training" / "monitor_"+model_args.vae_filename
+    from generate_faces import get_faces
+
+    monitor_path = model_args.project_dir / "training" / ("monitor_" + model_args.vae_filename)
     monitor_path.mkdir(parents=True, exist_ok=True)
 
     self.vae.eval()
@@ -153,17 +154,16 @@ class VAE_Trainer():
     kl_loss = [float(d["batch_kl_divergence"]) for d in metrics_history]
     rec_loss = [float(d["batch_reconstruction_error"]) for d in metrics_history]
 
-    epochs = [(epoch / len(metrics_history)) * (i + 1) for i in range(n)]
+    epochs = [(epoch / len(metrics_history)) * (i + 1) for i in range(len(metrics_history))]
 
     plt.figure(figsize=(10, 5))
     plt.plot(epochs, epoch_loss, label='Total Loss', marker='o', color='blue')
     plt.plot(epochs, kl_loss, label='KL', marker='s', color='red')
     plt.plot(epochs, rec_loss, label='Rec', marker='^', color='green')
 
-    plt.yscale('log')
     plt.xlabel('Epoch')
     plt.ylabel('Loss Value')
-    plt.title(f'Training Progress - Last Update: Epoch {epoch[-1]}')
+    plt.title(f'Training Progress - Last Update: Epoch {int(epochs[-1])}')
     plt.legend()
     plt.grid(True, alpha=0.3)
 
@@ -203,7 +203,8 @@ class VAE_Trainer():
     }
     metrics_history = []
 
-    batch_update_rate = len(self.train_loader) // 100
+    #batch_update_rate = len(self.train_loader) // 100
+    batch_update_rate = 1
     initial = self.trained_epochs
     with Progress(
         SpinnerColumn(),
@@ -287,4 +288,4 @@ class VAE_Trainer():
 
         if epochs_to_monitor!=0 and ((epoch + 1) % epochs_to_monitor)==0:
           metrics_history.append(metrics)
-          self.monitor(model_args, metrics_history, epoch)
+          self.monitor(model_args, metrics_history, (epoch + 1))
