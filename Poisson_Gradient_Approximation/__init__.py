@@ -1,3 +1,3 @@
-from .generate_faces import GenerationArgs, generate
+from .generate_faces import GenerationArgs, generate, get_faces
 
-__all__ = ['GenerationArgs', 'generate']
+__all__ = ['GenerationArgs', 'generate', 'get_faces']

@@ -64,8 +64,10 @@ with st.container(border=True):
   with col2:
     num_samples = st.number_input("Number of samples", value=5000, disabled=not clusterize, help="Samples number used to compute clusterization. Defaults to 5000")
 
-  st.space("small")
-  if st.button("Generate", width="stretch"):
+  btn = st.button("Generate", width="stretch")
+
+if btn:
+  with st.container(border=True):
     vae_filename = vae_filename or config("VAE_FILENAME", default="VAE.pt")
 
     args_obj = GenerationArgs(
@@ -94,6 +96,7 @@ with st.container(border=True):
       figs = generate(args_obj)
 
       for i, fig in enumerate(figs):
+        st.divider()
         st.pyplot(fig)
 
         buf = io.BytesIO()
@@ -106,4 +109,3 @@ with st.container(border=True):
           mime="image/png",
           key=f"btn_{i}"
         )
-        st.divider()

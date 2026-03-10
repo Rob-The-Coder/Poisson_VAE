@@ -1,13 +1,14 @@
 import torch
+import matplotlib.pyplot as plt
 
 from typing import Optional
 from torch.amp.autocast_mode import autocast
 from torch.cuda.amp.grad_scaler import GradScaler
-
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
 from vae import VAE
 from utils import ELBO_Loss, Model_Args
+from generate_faces import get_faces
 
 class VAE_Trainer():
   def __init__(
@@ -138,7 +139,38 @@ class VAE_Trainer():
     print("LR: " + str(self.lr) + "\nLAMBDA: " + str(self.LAMBDA) + "\nRESCALE: " + str(
       self.RESCALE) + "\nGRADIENT_CLIPPING: " + str(self.gradient_clipping))
 
-  def train(self, model_args: Model_Args, EPOCHS: int = 200, epochs_to_create_checkpoint: int = 0, optimize: bool = False):
+  def monitor(self, model_args: Model_Args, metrics_history: list[dict], epoch: int):
+    monitor_path = model_args.project_dir / "training" / "monitor_"+model_args.vae_filename
+    monitor_path.mkdir(parents=True, exist_ok=True)
+
+    self.vae.eval()
+    with torch.no_grad():
+      samples = self.vae.generate_faces(num_faces=16, LAMBDA=self.LAMBDA, device=self.__device)
+    fig = get_faces(samples, f"faces_epoch_{epoch}.png")
+    fig.savefig(monitor_path / f"faces_epoch_{epoch}.png")
+
+    epoch_loss = [float(d["avg_epoch_loss"]) for d in metrics_history]
+    kl_loss = [float(d["batch_kl_divergence"]) for d in metrics_history]
+    rec_loss = [float(d["batch_reconstruction_error"]) for d in metrics_history]
+
+    epochs = [(epoch / len(metrics_history)) * (i + 1) for i in range(n)]
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(epochs, epoch_loss, label='Total Loss', marker='o', color='blue')
+    plt.plot(epochs, kl_loss, label='KL', marker='s', color='red')
+    plt.plot(epochs, rec_loss, label='Rec', marker='^', color='green')
+
+    plt.yscale('log')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss Value')
+    plt.title(f'Training Progress - Last Update: Epoch {epoch[-1]}')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    plt.savefig(monitor_path / "live_loss_plot.png", dpi=150)
+    plt.close()
+
+  def train(self, model_args: Model_Args, EPOCHS: int = 200, epochs_to_create_checkpoint: int = 0, epochs_to_monitor: int = 0, optimize: bool = False):
     torch.backends.cudnn.benchmark = True
 
     if self.train_loader is None:
@@ -149,7 +181,7 @@ class VAE_Trainer():
 
     self.vae.to(self.__device)
 
-    # Checking if optimization is enabled
+    # Checking if optimization is enabled and tracing
     scaler = None
     if optimize:
       tmp_img, _ = next(iter(self.train_loader))
@@ -169,6 +201,7 @@ class VAE_Trainer():
       "batch_kl_divergence": "0",
       "batch_reconstruction_error": "0"
     }
+    metrics_history = []
 
     batch_update_rate = len(self.train_loader) // 100
     initial = self.trained_epochs
@@ -251,3 +284,7 @@ class VAE_Trainer():
         if epochs_to_create_checkpoint!=0 and ((epoch + 1) % epochs_to_create_checkpoint)==0:
           self.trained_epochs += epochs_to_create_checkpoint
           self.create_checkpoint(model_args)
+
+        if epochs_to_monitor!=0 and ((epoch + 1) % epochs_to_monitor)==0:
+          metrics_history.append(metrics)
+          self.monitor(model_args, metrics_history, epoch)

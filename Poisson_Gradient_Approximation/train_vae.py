@@ -35,6 +35,7 @@ def parse_args():
   parser.add_argument("--optimizer", type=str, choices=["AdamW", "Adam", "SGD"], default="AdamW", help="Decide which type of optimizer to use. Defaults to AdamW")
   parser.add_argument("--resume", action="store_true", default=False, help="Resume training from checkpoint. If not used defaults to False")
   parser.add_argument("--epochs_to_checkpoint", type=int, default=10, help="Number of epochs to create a checkpoint. Defaults to 10")
+  parser.add_argument("--epochs_to_monitor", type=int, default=0, help="Number of epochs to monitor the training process. Defaults to 0")
   parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train. Defaults to 100")
   parser.add_argument("--optimize", type=bool, default=True, help="Enables JIT and AMP. Defaults to True. Use --optimize False to disable")
   parser.add_argument("--clip_gradients", action="store_false", default=False, dest="clip", help="Enables gradient clipping. Defaults to False, use --clip_gradients True to enable")
@@ -122,6 +123,7 @@ if __name__ == "__main__":
       model_args=model_args,
       EPOCHS=args.epochs,
       epochs_to_create_checkpoint=args.epochs_to_checkpoint,
+      epochs_to_monitor=args.epochs_to_monitor,
       optimize=args.optimize,
     )
   except KeyboardInterrupt:

@@ -79,11 +79,13 @@ with st.container(border=True):
     with col2:
       optimizer = st.segmented_control("Optimizer", options=["AdamW", "Adam", "SGD"], default="AdamW", disabled=resume, help="Decide which type of optimizer to use. Defaults to AdamW")
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
       epochs = st.number_input("Training epochs", value=100, help="Number of epochs to train. Defaults to 100")
     with col2:
       epochs_to_checkpoint = st.number_input("Epochs to create a checkpoint", value=10, help="Number of epochs to create a checkpoint. Defaults to 10")
+    with col3:
+      epochs_to_monitor = st.number_input("Epochs to monitor training", value=0, help="Number of epochs to monitor the training process. Defaults to 0")
 
     add_btn = st.form_submit_button("Add to training queue", width="stretch")
     if add_btn:
@@ -115,12 +117,18 @@ if st.session_state.training_queue:
   with st.container(border=True):
     st.subheader("Training queue")
     for i, config in enumerate(st.session_state.training_queue):
-      st.markdown(f"#### Job {i + 1}")
+      col1, col2, col3 = st.columns(3)
+      with col1:
+        st.markdown(f"#### Job {i + 1}")
+      with col2:
+        st.space("stretch")
+      with col3:
+        if st.button(label="", icon=":material/delete:", width="stretch", type="primary", key=f"btn{i}"):
+          del st.session_state.training_queue[i - 1]
 
       markdown= "| :blue[Parameter] | :violet[Value] |\n|-----------|-------|\n"
       for key, value in config.items():
         markdown += f"| {key} | {str(value)} |\n"
-
       st.markdown(markdown, width="stretch")
 
     if st.button("START TRAINING", type="primary", width="stretch"):
@@ -139,7 +147,6 @@ if st.session_state.training_queue:
           command += "--resume "
         if clip_gradients:
           command += "--clip_gradients True "
-
         command += ";"
 
       subprocess.Popen(command, shell=True)
