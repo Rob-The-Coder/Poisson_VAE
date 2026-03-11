@@ -1,3 +1,4 @@
+import rich.console
 import torch
 import matplotlib.pyplot as plt
 
@@ -140,7 +141,7 @@ class VAE_Trainer():
 
   def monitor(self, model_args: Model_Args, metrics_history: list[dict], epoch: int):
     from generate_faces import get_faces
-
+        
     monitor_path = model_args.project_dir / "training" / ("monitor_" + model_args.vae_filename)
     monitor_path.mkdir(parents=True, exist_ok=True)
 
@@ -150,9 +151,9 @@ class VAE_Trainer():
     fig = get_faces(samples, f"faces_epoch_{epoch}.png")
     fig.savefig(monitor_path / f"faces_epoch_{epoch}.png")
 
-    epoch_loss = [float(d["avg_epoch_loss"]) for d in metrics_history]
-    kl_loss = [float(d["batch_kl_divergence"]) for d in metrics_history]
-    rec_loss = [float(d["batch_reconstruction_error"]) for d in metrics_history]
+    epoch_loss = [d["avg_epoch_loss"] for d in metrics_history]
+    kl_loss = [d["batch_kl_divergence"] for d in metrics_history]
+    rec_loss = [d["batch_reconstruction_error"] for d in metrics_history]
 
     epochs = [(epoch / len(metrics_history)) * (i + 1) for i in range(len(metrics_history))]
 
@@ -160,7 +161,7 @@ class VAE_Trainer():
     plt.plot(epochs, epoch_loss, label='Total Loss', marker='o', color='blue')
     plt.plot(epochs, kl_loss, label='KL', marker='s', color='red')
     plt.plot(epochs, rec_loss, label='Rec', marker='^', color='green')
-
+    
     plt.xlabel('Epoch')
     plt.ylabel('Loss Value')
     plt.title(f'Training Progress - Last Update: Epoch {int(epochs[-1])}')
@@ -203,8 +204,7 @@ class VAE_Trainer():
     }
     metrics_history = []
 
-    #batch_update_rate = len(self.train_loader) // 100
-    batch_update_rate = 1
+    batch_update_rate = len(self.train_loader) // 100
     initial = self.trained_epochs
     with Progress(
         SpinnerColumn(),
@@ -287,5 +287,9 @@ class VAE_Trainer():
           self.create_checkpoint(model_args)
 
         if epochs_to_monitor!=0 and ((epoch + 1) % epochs_to_monitor)==0:
-          metrics_history.append(metrics)
+          metrics_history.append({
+            "avg_epoch_loss": float(metrics["avg_epoch_loss"]),
+            "batch_kl_divergence": float(metrics["batch_kl_divergence"]),
+            "batch_reconstruction_error": float(metrics["batch_reconstruction_error"])
+          })
           self.monitor(model_args, metrics_history, (epoch + 1))
