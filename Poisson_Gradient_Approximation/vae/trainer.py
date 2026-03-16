@@ -1,4 +1,3 @@
-import rich.console
 import torch
 import matplotlib.pyplot as plt
 
@@ -8,7 +7,7 @@ from torch.cuda.amp.grad_scaler import GradScaler
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
 from vae import VAE
-from utils import ELBO_Loss, Model_Args
+from utils import ELBO_Loss, Poisson_ELBO_Loss, Model_Args
 
 class VAE_Trainer():
   def __init__(
@@ -27,7 +26,7 @@ class VAE_Trainer():
     self.vae = vae
 
     if loss_function is None:
-      self.loss_function = ELBO_Loss()
+      self.loss_function = Poisson_ELBO_Loss()
     else:
       self.loss_function = loss_function
 
@@ -119,8 +118,6 @@ class VAE_Trainer():
   def create_checkpoint(self, model_args: Model_Args):
     data = {
       "vae": self.vae.save_model(model_args),
-      "loss_function": self.loss_function,
-      "train_loader": self.train_loader,
       "optimizer_state": self.optimizer.state_dict(),
       "optimizer_name": self.optimizer.__class__.__name__,
       "LR": self.lr,

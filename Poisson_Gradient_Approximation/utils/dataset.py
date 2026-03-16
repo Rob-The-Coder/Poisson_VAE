@@ -26,7 +26,7 @@ class CustomDataset(ABC, torch.utils.data.Dataset):
 
   @staticmethod
   @abstractmethod
-  def get_dataloaders(height, width, batch_size, path: Path):
+  def get_dataloaders(height, width, batch_size, images_dir: Path):
     pass
 
 class CelebA(CustomDataset):

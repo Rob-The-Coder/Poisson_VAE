@@ -3,7 +3,9 @@ import torch
 from pathlib import Path
 from typing import Optional
 from utils import Model_Args
+
 from vae import Encoder_36M, Decoder_36M, Encoder_53M, Decoder_53M
+from utils import CustomPoissonSampling, GaussianReparametrizationTrick, Poisson_ELBO_Loss, Gaussian_ELBO_LOSS
 
 class VAE(torch.nn.Module):
   def __init__(
@@ -11,7 +13,7 @@ class VAE(torch.nn.Module):
     height,
     width,
     latent_dim,
-    sampling,
+    sampling: str,
     model_type: str = "36M"
   ):
     super().__init__()
@@ -28,21 +30,27 @@ class VAE(torch.nn.Module):
     if self.__model_type not in MODEL_MAP:
       supported = ", ".join(MODEL_MAP.keys())
       raise ValueError(
-        f"Unsupported optimizer '{self.__model_type}'. Supported: {supported}"
+        f"Unsupported model type '{self.__model_type}'. Supported: {supported}"
       )
     self.encoder, self.decoder = MODEL_MAP[self.__model_type]
 
     self.__sampling = sampling
+    SAMPLING_MAP = {
+      "PGA": (Poisson_ELBO_Loss(), CustomPoissonSampling().apply),
+      "GRP": (Gaussian_ELBO_LOSS(), GaussianReparametrizationTrick().apply),
+    }
+    if self.__sampling not in SAMPLING_MAP:
+      supported = ", ".join(SAMPLING_MAP.keys())
+      raise ValueError(
+        f"Unsupported sampling method '{self.__sampling}'. Supported: {supported}"
+      )
+    self.__loss_function, self.__sampling_method = SAMPLING_MAP[self.__sampling]
 
   @staticmethod
   def __restore_vae(data):
-    if "type" in data:
-      vae = VAE(data["height"], data["width"], data["latent_dim"], data["sampling"], data["type"])
-    else:
-      vae = VAE(data["height"], data["width"], data["latent_dim"], data["sampling"])
+    vae = VAE(data["height"], data["width"], data["latent_dim"], data["sampling"], data["type"])
 
     vae.load_state_dict(data["params"])
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
     vae.to(device)
 
@@ -100,6 +108,6 @@ class VAE(torch.nn.Module):
 
   def forward(self, x):
     lam = self.encoder(x)
-    z = self.__sampling(lam)
+    z = self.__sampling_method(lam)
     y = self.decoder(z)
     return lam, y

@@ -54,9 +54,9 @@ with st.container(border=True):
     # Hyperparameters
     col1, col2, col3 = st.columns(3)
     with col1:
-      height = st.number_input("Height", value=64, disabled=resume, help="Height of the image. Defaults to 64")
+      height = st.number_input("Height", value=64, help="Height of the image. Defaults to 64")
     with col2:
-      width = st.number_input("Width", value=64, disabled=resume, help="Width of the image. Defaults to 64")
+      width = st.number_input("Width", value=64, help="Width of the image. Defaults to 64")
     with col3:
       batch_size = st.number_input("Batch size", value=128, help="Batch size. Defaults to 128")
 
@@ -73,10 +73,12 @@ with st.container(border=True):
       latent_dim = st.number_input("Latent space dimension", value=128, disabled=resume, help="Dimension of the latent space. Defaults to 128")
 
     # Training
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
       model_type = st.segmented_control("Model type", options=["36M", "53M"], default="36M", disabled=resume, help="Decide which version of the model to use. Defaults to 36M")
     with col2:
+      sampling = st.segmented_control("Sampling strategy", options=["PGA", "GRP"], default="PGA", help="Decide which sampling strategy to adopt. Defaults to PGA")
+    with col3:
       optimizer = st.segmented_control("Optimizer", options=["AdamW", "Adam", "SGD"], default="AdamW", disabled=resume, help="Decide which type of optimizer to use. Defaults to AdamW")
 
     col1, col2, col3 = st.columns(3)
@@ -107,6 +109,7 @@ with st.container(border=True):
         "Lambda parameter": lam,
         "Latent space dimension": latent_dim,
         "Model type": model_type,
+        "Sampling": sampling,
         "Optimizer": optimizer,
         "Training epochs": epochs,
         "Epochs to checkpoint": epochs_to_checkpoint,
@@ -138,7 +141,7 @@ if st.session_state.training_queue:
         command += (f"python3 train_vae.py --images_dir '{config['Image folder path']}' --project_dir '{config['Project directory']}' "
                   f"--vae_filename '{config['VAE filename']}' --vae_checkpoint '{config['VAE checkpoint']}' --height {config['Height']} "
                   f"--width {config['Width']} --batch_size {config['Batch size']} --lr {config['Learning rate']} --rescale {config['Rescale parameter']} "
-                  f"--lam {config['Lambda parameter']} --latent_dim {config['Latent space dimension']} --type '{config['Model type']}' "
+                  f"--lam {config['Lambda parameter']} --latent_dim {config['Latent space dimension']} --type '{config['Model type']}' --sampling {config['Sampling']} "
                   f"--optimizer '{config['Optimizer']}' --epochs_to_checkpoint {config['Epochs to checkpoint']} --epochs_to_monitor {config['Epochs to monitor']} "
                   f"--epochs {config['Training epochs']} ")
 
