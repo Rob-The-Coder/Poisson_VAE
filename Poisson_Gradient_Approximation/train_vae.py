@@ -7,7 +7,7 @@ from rich.table import Table
 from decouple import config
 from pathlib import Path
 
-from utils import CustomPoissonSampling, GaussianReparametrizationTrick, Poisson_ELBO_Loss, Gaussian_ELBO_Loss, CelebA, Model_Args
+from utils import CelebA, ModelArgs
 from vae import VAE, VAE_Trainer
 
 def parse_args():
@@ -32,7 +32,7 @@ def parse_args():
 
   # Training - Hardware/Optimization
   parser.add_argument("--type", type=str, choices=["36M", "53M"], default="36M", help="Decide which version of the model to use. Defaults to 36M")
-  parser.add_argument("--sampling", type=str, choices=["PGA", "GRP"], default="PGA", help="Decide which sampling strategy to adopt. Defaults to PGA")
+  parser.add_argument("--sampling", type=str, choices=["PGA", "GRT"], default="PGA", help="Decide which sampling strategy to adopt. Defaults to PGA")
   parser.add_argument("--optimizer", type=str, choices=["AdamW", "Adam", "SGD"], default="AdamW", help="Decide which type of optimizer to use. Defaults to AdamW")
   parser.add_argument("--resume", action="store_true", default=False, help="Resume training from checkpoint. If not used defaults to False")
   parser.add_argument("--epochs_to_checkpoint", type=int, default=10, help="Number of epochs to create a checkpoint. Defaults to 10")
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
     exit(1)
 
-  model_args = Model_Args(vae_filename=args.vae_filename, checkpoint_filename=args.vae_checkpoint, project_dir=project_dir)
+  model_args = ModelArgs(vae_filename=args.vae_filename, checkpoint_filename=args.vae_checkpoint, project_dir=project_dir)
 
   train_loader, _ = CelebA.get_dataloaders(
     height=args.height,
@@ -90,24 +90,11 @@ if __name__ == "__main__":
     images_dir=images_dir
   )
 
-  # By now just to make it work
-  SAMPLING_MAP = {
-    "PGA": (Poisson_ELBO_Loss(), CustomPoissonSampling().apply),
-    "GRP": (Gaussian_ELBO_Loss(), GaussianReparametrizationTrick().apply),
-  }
-  if args.sampling not in SAMPLING_MAP:
-    supported = ", ".join(SAMPLING_MAP.keys())
-    raise ValueError(
-      f"Unsupported sampling method '{args.sampling}'. Supported: {supported}"
-    )
-  elbo_loss, _ = SAMPLING_MAP[args.sampling]
-
   if args.resume:
     print("\n[bold cyan][INFO]: [/bold cyan] Recovering model from checkpoint...")
 
     trainer = VAE_Trainer.from_checkpoint(model_args)
     trainer.set_train_loader(train_loader)
-    trainer.set_loss_function(elbo_loss)
     trainer.explain_checkpoint()
   else:
     print("\n[bold cyan][INFO]: [/bold cyan] Instantiating model and trainer...")
@@ -119,7 +106,6 @@ if __name__ == "__main__":
 
     trainer = VAE_Trainer(
       vae=vae,
-      loss_function=elbo_loss,
       train_loader=train_loader,
       create_optimizer=(args.optimizer, args.lr),
       gradient_clipping=args.clip,

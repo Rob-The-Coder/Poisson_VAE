@@ -2,17 +2,16 @@ import torch
 
 from pathlib import Path
 from typing import Optional
-from utils import Model_Args
 
-from vae import Encoder_36M, Decoder_36M, Encoder_53M, Decoder_53M
-from utils import CustomPoissonSampling, GaussianReparametrizationTrick, Poisson_ELBO_Loss, Gaussian_ELBO_LOSS
+from vae import Encoder_36M, Decoder_36M, Encoder_53M, Decoder_53M, Encoder_GRT_53M, Decoder_GRT_53M, VAEOutput
+from utils import ModelArgs, ModelFactory, CustomPoissonSampling, GaussianReparametrizationTrick, Poisson_ELBO_Loss, Gaussian_ELBO_Loss
 
 class VAE(torch.nn.Module):
   def __init__(
     self,
     height,
     width,
-    latent_dim,
+    latent_dim: int,
     sampling: str,
     model_type: str = "36M"
   ):
@@ -21,31 +20,22 @@ class VAE(torch.nn.Module):
     self.__height = height
     self.__width = width
 
-    # Instantiating correct model type
-    self.__model_type = model_type
-    MODEL_MAP = {
-      "36M": (Encoder_36M(height, width, latent_dim), Decoder_36M(height, width, latent_dim)),
-      "53M": (Encoder_53M(height, width, latent_dim), Decoder_53M(height, width, latent_dim)),
-    }
-    if self.__model_type not in MODEL_MAP:
-      supported = ", ".join(MODEL_MAP.keys())
-      raise ValueError(
-        f"Unsupported model type '{self.__model_type}'. Supported: {supported}"
-      )
-    self.encoder, self.decoder = MODEL_MAP[self.__model_type]
-
     self.__sampling = sampling
     SAMPLING_MAP = {
-      "PGA": (Poisson_ELBO_Loss(), CustomPoissonSampling().apply),
-      "GRP": (Gaussian_ELBO_LOSS(), GaussianReparametrizationTrick().apply),
+      "PGA": (Poisson_ELBO_Loss(), CustomPoissonSampling().apply, self.__forward_pga, self.__generate_pga),
+      "GRT": (Gaussian_ELBO_Loss(), GaussianReparametrizationTrick().apply, self.__forward_grt, self.__generate_grt),
     }
     if self.__sampling not in SAMPLING_MAP:
       supported = ", ".join(SAMPLING_MAP.keys())
       raise ValueError(
         f"Unsupported sampling method '{self.__sampling}'. Supported: {supported}"
       )
-    self.__loss_function, self.__sampling_method = SAMPLING_MAP[self.__sampling]
+    self.__loss_function, self.__sampling_method, self.__forward_logic, self.__generation_logic = SAMPLING_MAP[self.__sampling]
 
+    # Instantiating correct model
+    self.__model_type = model_type
+    self.encoder, self.decoder = ModelFactory.create(self.__sampling, self.__model_type, self.__height, self.__width, self.__latent_dim)
+    
   @staticmethod
   def __restore_vae(data):
     vae = VAE(data["height"], data["width"], data["latent_dim"], data["sampling"], data["type"])
@@ -57,7 +47,7 @@ class VAE(torch.nn.Module):
     return vae
 
   @staticmethod
-  def from_pretrained(model_args: Optional[Model_Args] = None, data: Optional[dict] = None):
+  def from_pretrained(model_args: Optional[ModelArgs] = None, data: Optional[dict] = None):
     if model_args is None and data is None:
       raise ValueError("Either model_args or data must be provided!")
 
@@ -85,13 +75,7 @@ class VAE(torch.nn.Module):
     with torch.no_grad():
       return self.decoder(z)
 
-  def generate_faces(self, num_faces, LAMBDA, device):
-    z = torch.poisson(torch.full((num_faces, self.__latent_dim), LAMBDA, device=device, dtype=torch.float32))
-    faces = self.decode(z)
-
-    return faces
-
-  def save_model(self, model_args: Model_Args):
+  def save_model(self, model_args: ModelArgs):
     data = {
       "params": self.state_dict(),
       "height": self.__height,
@@ -103,11 +87,46 @@ class VAE(torch.nn.Module):
 
     # Saving model on filesystem
     torch.save(data, Path(model_args.project_dir) / "models/" / model_args.vae_filename)
-
     return data
 
-  def forward(self, x):
+  # GENERATION LOGIC
+  def __generate_pga(self, num_faces, device, **kwargs):
+    lambda_ = kwargs.get("LAMBDA")
+    if lambda_ is None:
+      raise ValueError("LAMBDA cannot be None")
+
+    z = torch.poisson(torch.full((num_faces, self.__latent_dim), lambda_, device=device, dtype=torch.float32))
+    faces = self.decode(z)
+
+    return faces
+
+  def __generate_grt(self, num_faces, device, **kwargs):
+    z = torch.randn(num_faces, self.__latent_dim, device=device)
+    faces = self.decode(z)
+
+    return faces
+
+  def generate_faces(self, num_faces, device, **kwargs):
+    return self.__generation_logic(num_faces, device, **kwargs)
+
+  # LOSS LOGIC
+  def compute_loss(self, x, out: VAEOutput, **kwargs):
+    return self.__loss_function(x, out, kwargs)
+
+  # FORWARD LOGIC
+  def __forward_pga(self, x):
     lam = self.encoder(x)
     z = self.__sampling_method(lam)
     y = self.decoder(z)
-    return lam, y
+
+    return VAEOutput(reconstruction=y, p1=lam)
+
+  def __forward_grt(self, x):
+    mu, log_var = self.encoder(x)
+    z = self.__sampling_method(mu, log_var)
+    y = self.decoder(z)
+
+    return VAEOutput(reconstruction=y, p1=mu, p2=log_var)
+
+  def forward(self, x):
+    return self.__forward_logic(x)

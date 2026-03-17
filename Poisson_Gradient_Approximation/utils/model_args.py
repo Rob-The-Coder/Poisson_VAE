@@ -1,6 +1,6 @@
 from pathlib import Path
 
-class Model_Args():
+class ModelArgs():
   def __init__(
       self,
       vae_filename: str,

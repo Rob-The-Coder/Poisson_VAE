@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from utils import CelebA
 from vae import VAE
-from utils import Model_Args
+from utils import ModelArgs
 
 @dataclass
 class GenerationArgs:
@@ -64,12 +64,12 @@ def generate(args_dict: GenerationArgs):
     print(f"[bold red][ERROR]: [/bold red] Path {images_dir} not found!")
     exit(1)
 
-  model_args = Model_Args(vae_filename=args_dict.vae_filename, checkpoint_filename="", project_dir=project_dir)
+  model_args = ModelArgs(vae_filename=args_dict.vae_filename, checkpoint_filename="", project_dir=project_dir)
   vae = VAE.from_pretrained(model_args)
   vae.eval()
 
   print("\n[bold cyan][INFO]: [/bold cyan] Generating faces...")
-  faces = vae.generate_faces(num_faces=args_dict.num_faces, LAMBDA=args_dict.lam, device=device)
+  faces = vae.generate_faces(num_faces=args_dict.num_faces, device=device, LAMBDA=args_dict.lam)
   figures.append(get_faces(faces, args_dict.title))
 
   if args_dict.interpolation:

@@ -13,7 +13,6 @@ class VAE_Trainer():
   def __init__(
       self,
       vae: VAE,
-      loss_function: Optional[ELBO_Loss] = None,
       train_loader: Optional[torch.utils.data.DataLoader] = None,
       optimizer: Optional[torch.optim.Optimizer] = None,
       create_optimizer: tuple[str, float] = ("AdamW", 1e-4),
@@ -24,11 +23,6 @@ class VAE_Trainer():
   ):
     self.__device = "cuda" if torch.cuda.is_available() else "cpu"
     self.vae = vae
-
-    if loss_function is None:
-      self.loss_function = Poisson_ELBO_Loss()
-    else:
-      self.loss_function = loss_function
 
     self.train_loader = train_loader
 
@@ -91,15 +85,10 @@ class VAE_Trainer():
     return OPTIMIZERS_MAP[optimizer_name]
 
   @staticmethod
-  def from_checkpoint(model_args: Model_Args, train_loader: Optional[torch.utils.data.DataLoader] = None,
-                      loss_function: Optional[ELBO_Loss] = None):
-    if (train_loader is None and loss_function is not None) or (train_loader is not None and loss_function is None):
-      raise ValueError("If train loader is passed, also loss function must be passed. And vice-versa!")
-
+  def from_checkpoint(model_args: Model_Args, train_loader: Optional[torch.utils.data.DataLoader] = None):
     trainer = VAE_Trainer.__restore_trainer(model_args)
-    if train_loader is not None and loss_function is not None:
+    if train_loader is not None:
       trainer.set_train_loader(train_loader)
-      trainer.set_loss_function(loss_function)
 
     return trainer
 
@@ -108,12 +97,6 @@ class VAE_Trainer():
       raise ValueError("Error! Trying to set a None train loader.")
 
     self.train_loader = train_loader
-
-  def set_loss_function(self, loss_function: Optional[ELBO_Loss] = None):
-    if loss_function is None:
-      raise ValueError("Error! Trying to set a None loss function.")
-
-    self.loss_function = loss_function
 
   def create_checkpoint(self, model_args: Model_Args):
     data = {
@@ -144,7 +127,7 @@ class VAE_Trainer():
 
     self.vae.eval()
     with torch.no_grad():
-      samples = self.vae.generate_faces(num_faces=16, LAMBDA=self.LAMBDA, device=self.__device)
+      samples = self.vae.generate_faces(num_faces=16, device=self.__device, LAMBDA=self.LAMBDA)
     fig = get_faces(samples, f"faces_epoch_{epoch}.png")
     fig.savefig(monitor_path / f"faces_epoch_{epoch}.png")
 
@@ -174,9 +157,6 @@ class VAE_Trainer():
     if self.train_loader is None:
       raise ValueError("Error! Trying to train without specifying the train loader.")
 
-    if self.loss_function is None:
-      raise ValueError("Error! Trying to train without specifying the loss function.")
-
     self.vae.to(self.__device)
 
     # Checking if optimization is enabled and tracing
@@ -184,10 +164,8 @@ class VAE_Trainer():
     if optimize:
       tmp_img, _ = next(iter(self.train_loader))
       tmp_img = tmp_img.to(self.__device)
-      
-      tmp_latents = self.vae.encode(tmp_img).to(self.__device)
+      tmp_latents = torch.randn(tmp_img.size[0], self.vae.latent_dim, device=self.__device, dtype=tmp_img.dtype)
 
-      # Tracing model to jit optimize it
       self.vae.train()
       self.vae.encoder = torch.jit.trace(self.vae.encoder, tmp_img)
       self.vae.decoder = torch.jit.trace(self.vae.decoder, tmp_latents)
@@ -236,15 +214,13 @@ class VAE_Trainer():
           # Executing optimized version or normal depending on optimize
           if optimize:
             with autocast(self.__device, enabled=True, dtype=torch.float16):
-              lam, y = self.vae(x)
-
-              kl_div, rec_error = self.loss_function.compute_loss(x, y, lam, self.LAMBDA, self.RESCALE)
+              out = self.vae(x)
+              kl_div, rec_error = self.vae.compute_loss(x, out, rescale=self.RESCALE, lambda_=self.LAMBDA)
 
             with autocast(self.__device, enabled=False):
               loss = kl_div + rec_error
 
             tot_loss += loss.item()
-
             scaler.scale(loss).backward()
 
             if self.gradient_clipping:
@@ -254,11 +230,10 @@ class VAE_Trainer():
             scaler.step(self.optimizer)
             scaler.update()
           else:
-            lam, y = self.vae(x)
-
-            kl_div, rec_error = self.loss_function.compute_loss(x, y, lam, self.LAMBDA, self.RESCALE)
+            out = self.vae(x)
+            kl_div, rec_error = self.vae.compute_loss(x, out, rescale=self.RESCALE, lambda_=self.LAMBDA)
+                
             loss = kl_div + rec_error
-
             tot_loss += loss.item()
             loss.backward()
 
