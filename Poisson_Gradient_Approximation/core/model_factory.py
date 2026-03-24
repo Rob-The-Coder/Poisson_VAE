@@ -1,4 +1,5 @@
-from vae import Encoder_36M, Decoder_36M, Encoder_53M, Decoder_53M, Encoder_GRT_53M, Decoder_GRT_53M
+from vae.encoders import Encoder_36M, Encoder_53M, Encoder_GRT_53M
+from vae.decoders import Decoder_36M, Decoder_53M, Decoder_GRT_53M
 
 class ModelFactory:
   _REGISTRY = {

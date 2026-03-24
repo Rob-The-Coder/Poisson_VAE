@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from utils import CelebA
 from vae import VAE
-from utils import ModelArgs
+from core.model_args import ModelArgs
 
 @dataclass
 class GenerationArgs:

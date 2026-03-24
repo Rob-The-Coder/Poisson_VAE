@@ -7,7 +7,8 @@ from rich.table import Table
 from decouple import config
 from pathlib import Path
 
-from utils import CelebA, ModelArgs
+from utils import CelebA
+from core.model_args import ModelArgs
 from vae import VAE, VAE_Trainer
 
 def parse_args():
@@ -101,8 +102,11 @@ if __name__ == "__main__":
 
     vae = VAE(height=args.height, width=args.width, latent_dim=args.latent_dim, sampling=args.sampling, model_type=args.type)
 
-    print("\n[bold green][DEBUG]: [/bold green] Printing summary of model...")
-    summary(vae, input_size=(train_loader.batch_size, 3, args.height, args.width))
+    print("\n[bold green][DEBUG]: [/bold green] Printing summary of encoder...")
+    summary(vae.encoder, input_size=(train_loader.batch_size, 3, args.height, args.width))
+
+    print("\n[bold green][DEBUG]: [/bold green] Printing summary of decoder...")
+    #summary(vae.decoder, input_size=(train_loader.batch_size, vae.latent_dim))
 
     trainer = VAE_Trainer(
       vae=vae,

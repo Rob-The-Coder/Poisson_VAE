@@ -32,7 +32,7 @@ with st.container(border=True):
   with col3:
     lam = st.number_input("Lambda parameter", value=10, help="Lambda parameter. Defaults to 10")
 
-  title = st.text_area("Image title", value="", help="Title of the generated plot. By default is set to a blank string")
+  title = st.text_area("Image title", value="XXM parameters - XXX epochs - $\lambda = X$ - LAT XXX - RES XXXX", help="Title of the generated plot. By default is set to a useful string")
 
   # Interpolation
   col1, col2 = st.columns(2)

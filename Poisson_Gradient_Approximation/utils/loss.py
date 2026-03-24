@@ -1,7 +1,7 @@
 import torch
 from abc import ABC, abstractmethod
 
-from vae import VAEOutput
+from core.vae_output import VAEOutput
 
 class ELBO_Loss(ABC):
   @abstractmethod
@@ -29,6 +29,7 @@ class Gaussian_ELBO_Loss(ELBO_Loss):
     rescale_ = kwargs.get("rescale", 1e-2)
     mu = out.p1
     log_var = out.p2
+    y = out.reconstruction
 
     rec_error = (y - x).abs().mean()
     kl_div = 0.5 * (torch.exp(log_var).sum() + (mu ** 2).sum() - log_var.sum())

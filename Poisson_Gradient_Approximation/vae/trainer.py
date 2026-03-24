@@ -7,7 +7,8 @@ from torch.cuda.amp.grad_scaler import GradScaler
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
 from vae import VAE
-from utils import ELBO_Loss, Poisson_ELBO_Loss, Model_Args
+from utils import ELBO_Loss, Poisson_ELBO_Loss
+from core.model_args import ModelArgs
 
 class VAE_Trainer():
   def __init__(
@@ -40,7 +41,7 @@ class VAE_Trainer():
     self.trained_epochs = trained_epochs
 
   @staticmethod
-  def __restore_trainer(model_args: Model_Args):
+  def __restore_trainer(model_args: ModelArgs):
 
     # Loading model from filesystem
     data = torch.load(model_args.project_dir / "checkpoints/" / model_args.checkpoint_filename)
@@ -85,7 +86,7 @@ class VAE_Trainer():
     return OPTIMIZERS_MAP[optimizer_name]
 
   @staticmethod
-  def from_checkpoint(model_args: Model_Args, train_loader: Optional[torch.utils.data.DataLoader] = None):
+  def from_checkpoint(model_args: ModelArgs, train_loader: Optional[torch.utils.data.DataLoader] = None):
     trainer = VAE_Trainer.__restore_trainer(model_args)
     if train_loader is not None:
       trainer.set_train_loader(train_loader)
@@ -98,7 +99,7 @@ class VAE_Trainer():
 
     self.train_loader = train_loader
 
-  def create_checkpoint(self, model_args: Model_Args):
+  def create_checkpoint(self, model_args: ModelArgs):
     data = {
       "vae": self.vae.save_model(model_args),
       "optimizer_state": self.optimizer.state_dict(),
@@ -119,7 +120,7 @@ class VAE_Trainer():
     print("LR: " + str(self.lr) + "\nLAMBDA: " + str(self.LAMBDA) + "\nRESCALE: " + str(
       self.RESCALE) + "\nGRADIENT_CLIPPING: " + str(self.gradient_clipping))
 
-  def monitor(self, model_args: Model_Args, metrics_history: list[dict], epoch: int):
+  def monitor(self, model_args: ModelArgs, metrics_history: list[dict], epoch: int):
     from generate_faces import get_faces
         
     monitor_path = model_args.project_dir / "training" / ("monitor_" + model_args.vae_filename)
@@ -151,7 +152,7 @@ class VAE_Trainer():
     plt.savefig(monitor_path / "live_loss_plot.png", dpi=150)
     plt.close()
 
-  def train(self, model_args: Model_Args, EPOCHS: int = 200, epochs_to_create_checkpoint: int = 0, epochs_to_monitor: int = 0, optimize: bool = False):
+  def train(self, model_args: ModelArgs, EPOCHS: int = 200, epochs_to_create_checkpoint: int = 0, epochs_to_monitor: int = 0, optimize: bool = False):
     torch.backends.cudnn.benchmark = True
 
     if self.train_loader is None:
@@ -164,7 +165,7 @@ class VAE_Trainer():
     if optimize:
       tmp_img, _ = next(iter(self.train_loader))
       tmp_img = tmp_img.to(self.__device)
-      tmp_latents = torch.randn(tmp_img.size[0], self.vae.latent_dim, device=self.__device, dtype=tmp_img.dtype)
+      tmp_latents = torch.randn(tmp_img.size()[0], self.vae.latent_dim, device=self.__device, dtype=tmp_img.dtype)
 
       self.vae.train()
       self.vae.encoder = torch.jit.trace(self.vae.encoder, tmp_img)
@@ -180,6 +181,7 @@ class VAE_Trainer():
     metrics_history = []
 
     batch_update_rate = len(self.train_loader) // 100
+    batch_update_rate = 1
     initial = self.trained_epochs
     with Progress(
         SpinnerColumn(),

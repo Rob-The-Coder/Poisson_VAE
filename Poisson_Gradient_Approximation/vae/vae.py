@@ -3,8 +3,11 @@ import torch
 from pathlib import Path
 from typing import Optional
 
-from vae import Encoder_36M, Decoder_36M, Encoder_53M, Decoder_53M, Encoder_GRT_53M, Decoder_GRT_53M, VAEOutput
-from utils import ModelArgs, ModelFactory, CustomPoissonSampling, GaussianReparametrizationTrick, Poisson_ELBO_Loss, Gaussian_ELBO_Loss
+from core.vae_output import VAEOutput
+from core.model_factory import ModelFactory
+from core.model_args import ModelArgs
+from utils.sampling import CustomPoissonSampling, GaussianReparametrizationTrick
+from utils.loss import Poisson_ELBO_Loss, Gaussian_ELBO_Loss
 
 class VAE(torch.nn.Module):
   def __init__(
@@ -12,7 +15,7 @@ class VAE(torch.nn.Module):
     height,
     width,
     latent_dim: int,
-    sampling: str,
+    sampling: str = "PGA",
     model_type: str = "36M"
   ):
     super().__init__()
@@ -111,7 +114,7 @@ class VAE(torch.nn.Module):
 
   # LOSS LOGIC
   def compute_loss(self, x, out: VAEOutput, **kwargs):
-    return self.__loss_function(x, out, kwargs)
+    return self.__loss_function.compute_loss(x, out, **kwargs)
 
   # FORWARD LOGIC
   def __forward_pga(self, x):

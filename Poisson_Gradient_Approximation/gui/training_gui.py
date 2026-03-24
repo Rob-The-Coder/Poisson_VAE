@@ -77,7 +77,7 @@ with st.container(border=True):
     with col1:
       model_type = st.segmented_control("Model type", options=["36M", "53M"], default="36M", disabled=resume, help="Decide which version of the model to use. Defaults to 36M")
     with col2:
-      sampling = st.segmented_control("Sampling strategy", options=["PGA", "GRP"], default="PGA", help="Decide which sampling strategy to adopt. Defaults to PGA")
+      sampling = st.segmented_control("Sampling strategy", options=["PGA", "GRT"], default="PGA", help="Decide which sampling strategy to adopt. Defaults to PGA")
     with col3:
       optimizer = st.segmented_control("Optimizer", options=["AdamW", "Adam", "SGD"], default="AdamW", disabled=resume, help="Decide which type of optimizer to use. Defaults to AdamW")
 
