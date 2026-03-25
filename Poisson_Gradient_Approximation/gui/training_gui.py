@@ -75,7 +75,7 @@ with st.container(border=True):
     # Training
     col1, col2, col3 = st.columns(3)
     with col1:
-      model_type = st.segmented_control("Model type", options=["36M", "53M"], default="36M", disabled=resume, help="Decide which version of the model to use. Defaults to 36M")
+      model_type = st.segmented_control("Model type", options=["36M", "53M", "60M"], default="36M", disabled=resume, help="Decide which version of the model to use. Defaults to 36M")
     with col2:
       sampling = st.segmented_control("Sampling strategy", options=["PGA", "GRT"], default="PGA", help="Decide which sampling strategy to adopt. Defaults to PGA")
     with col3:

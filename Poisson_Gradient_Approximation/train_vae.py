@@ -1,7 +1,6 @@
 import argparse
 
 from torchinfo import summary
-from rich import print
 from rich.console import Console
 from rich.table import Table
 from decouple import config
@@ -32,12 +31,12 @@ def parse_args():
   parser.add_argument("--latent_dim", type=int, default=128, help="Dimension of the latent space. Defaults to 128")
 
   # Training - Hardware/Optimization
-  parser.add_argument("--type", type=str, choices=["36M", "53M"], default="36M", help="Decide which version of the model to use. Defaults to 36M")
+  parser.add_argument("--type", type=str, choices=["36M", "53M", "60M"], default="36M", help="Decide which version of the model to use. Defaults to 36M")
   parser.add_argument("--sampling", type=str, choices=["PGA", "GRT"], default="PGA", help="Decide which sampling strategy to adopt. Defaults to PGA")
   parser.add_argument("--optimizer", type=str, choices=["AdamW", "Adam", "SGD"], default="AdamW", help="Decide which type of optimizer to use. Defaults to AdamW")
   parser.add_argument("--resume", action="store_true", default=False, help="Resume training from checkpoint. If not used defaults to False")
   parser.add_argument("--epochs_to_checkpoint", type=int, default=10, help="Number of epochs to create a checkpoint. Defaults to 10")
-  parser.add_argument("--epochs_to_monitor", type=int, default=0, help="Number of epochs to monitor the training process. Defaults to 0")
+  parser.add_argument("--epochs_to_monitor", type=int, default=0, help="Numb128er of epochs to monitor the training process. Defaults to 0")
   parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train. Defaults to 100")
   parser.add_argument("--optimize", type=bool, default=True, help="Enables JIT and AMP. Defaults to True. Use --optimize False to disable")
   parser.add_argument("--clip_gradients", action="store_false", default=False, dest="clip", help="Enables gradient clipping. Defaults to False, use --clip_gradients True to enable")
@@ -50,9 +49,7 @@ def parse_args():
   args.vae_checkpoint = args.vae_checkpoint or config("VAE_CHECKPOINT", default="VAE_checkpoint.pt")
   return args
 
-def print_args(args):
-  console = Console()
-
+def print_args(args, console):
   table = Table(title="VAE Training Configuration")
 
   table.add_column("Parameter", style="cyan")
@@ -64,22 +61,24 @@ def print_args(args):
   console.print(table)
 
 if __name__ == "__main__":
+  console = Console(record=True)
+
   # Parsing args from command line
   args = parse_args()
 
   # Printing args
-  print_args(args)
+  print_args(args, console)
 
   # Checking the existence of paths
   images_dir = Path(args.images_dir)
   project_dir = Path(args.project_dir)
 
   if not images_dir.exists():
-    print(f"[bold red][ERROR]: [/bold red] Path {images_dir} not found!")
+    console.print(f"[bold red][ERROR]: [/bold red] Path {images_dir} not found!")
     exit(1)
 
   if not project_dir.exists():
-    print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
+    console.print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
     exit(1)
 
   model_args = ModelArgs(vae_filename=args.vae_filename, checkpoint_filename=args.vae_checkpoint, project_dir=project_dir)
@@ -92,21 +91,20 @@ if __name__ == "__main__":
   )
 
   if args.resume:
-    print("\n[bold cyan][INFO]: [/bold cyan] Recovering model from checkpoint...")
+    console.print("\n[bold cyan][INFO]: [/bold cyan] Recovering model from checkpoint...")
 
     trainer = VAE_Trainer.from_checkpoint(model_args)
     trainer.set_train_loader(train_loader)
     trainer.explain_checkpoint()
   else:
-    print("\n[bold cyan][INFO]: [/bold cyan] Instantiating model and trainer...")
-
+    console.print("\n[bold cyan][INFO]: [/bold cyan] Instantiating model and trainer...")
     vae = VAE(height=args.height, width=args.width, latent_dim=args.latent_dim, sampling=args.sampling, model_type=args.type)
 
-    print("\n[bold green][DEBUG]: [/bold green] Printing summary of encoder...")
-    summary(vae.encoder, input_size=(train_loader.batch_size, 3, args.height, args.width))
+    console.print("\n[bold green][DEBUG]: [/bold green] Printing summary of encoder...")
+    console.print(str(summary(vae.encoder, input_size=(train_loader.batch_size, 3, args.height, args.width))))
 
-    print("\n[bold green][DEBUG]: [/bold green] Printing summary of decoder...")
-    #summary(vae.decoder, input_size=(train_loader.batch_size, vae.latent_dim))
+    console.print("\n[bold green][DEBUG]: [/bold green] Printing summary of decoder...")
+    console.print(str(summary(vae.decoder, input_size=(train_loader.batch_size, vae.latent_dim))))
 
     trainer = VAE_Trainer(
       vae=vae,
@@ -118,7 +116,7 @@ if __name__ == "__main__":
     )
 
   try:
-    print("\n[bold cyan][INFO]: [/bold cyan] Starting training...")
+    console.print("\n[bold cyan][INFO]: [/bold cyan] Starting training...")
 
     trainer.train(
       model_args=model_args,
@@ -128,5 +126,10 @@ if __name__ == "__main__":
       optimize=args.optimize,
     )
   except KeyboardInterrupt:
-    print("\n[bold red][ERROR]: [/bold red] Training was interrupted. Saving a last checkpoint...")
+    console.print("\n[bold red][ERROR]: [/bold red] Training was interrupted. Saving a last checkpoint...")
     trainer.create_checkpoint(model_args=model_args)
+  finally:
+    monitor_path = model_args.project_dir / "training" / ("monitor_" + model_args.vae_filename)
+    monitor_path.mkdir(parents=True, exist_ok=True)
+
+    console.save_html((monitor_path / "training_log.html").absolute().as_posix())
