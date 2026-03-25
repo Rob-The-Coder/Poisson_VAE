@@ -12,15 +12,15 @@ from core.model_args import ModelArgs
 
 class VAE_Trainer():
   def __init__(
-      self,
-      vae: VAE,
-      train_loader: Optional[torch.utils.data.DataLoader] = None,
-      optimizer: Optional[torch.optim.Optimizer] = None,
-      create_optimizer: tuple[str, float] = ("AdamW", 1e-4),
-      gradient_clipping: bool = True,
-      LAMBDA=100,
-      RESCALE=1e-2,
-      trained_epochs: int = 0,
+    self,
+    vae: VAE,
+    train_loader: Optional[torch.utils.data.DataLoader] = None,
+    optimizer: Optional[torch.optim.Optimizer] = None,
+    create_optimizer: tuple[str, float] = ("AdamW", 1e-4),
+    gradient_clipping: bool = True,
+    LAMBDA=100,
+    RESCALE=1e-2,
+    trained_epochs: int = 0,
   ):
     self.__device = "cuda" if torch.cuda.is_available() else "cpu"
     self.vae = vae
@@ -122,7 +122,7 @@ class VAE_Trainer():
 
   def monitor(self, model_args: ModelArgs, metrics_history: list[dict], epoch: int):
     from generate_faces import get_faces
-        
+
     monitor_path = model_args.project_dir / "training" / ("monitor_" + model_args.vae_filename)
     monitor_path.mkdir(parents=True, exist_ok=True)
 
@@ -181,7 +181,6 @@ class VAE_Trainer():
     metrics_history = []
 
     batch_update_rate = len(self.train_loader) // 100
-    batch_update_rate = 1
     initial = self.trained_epochs
     with Progress(
         SpinnerColumn(),

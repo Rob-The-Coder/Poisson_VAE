@@ -5,10 +5,111 @@ from rich.console import Console
 from rich.table import Table
 from decouple import config
 from pathlib import Path
+from dataclasses import dataclass, fields
 
 from utils import CelebA
 from core.model_args import ModelArgs
 from vae import VAE, VAE_Trainer
+
+@dataclass
+class TrainingArgs:
+  images_dir: str
+  project_dir: str
+  vae_filename: str
+  vae_checkpoint: str
+  height: int = 64
+  width: int = 64
+  batch_size: int = 128
+  lr: float = 1e-4
+  rescale: float = 1e-2
+  lam: int = 10
+  latent_dim: int = 128
+  type: str = "36M"
+  sampling: str = "PGA"
+  optimizer: str = "AdamW"
+  resume: bool = False
+  epochs_to_checkpoint: int = 10
+  epochs_to_monitor: int = 0
+  epochs: int = 100
+  optimize: bool = True
+  clip_gradients: bool = False
+
+def train(args_dict: TrainingArgs):
+  console = Console(record=True)
+  table = Table(title="VAE Training Configuration")
+
+  table.add_column("Parameter", style="cyan")
+  table.add_column("Value", style="magenta")
+
+  for field in fields(args_dict):
+    table.add_row(field.name, str(getattr(args_dict, field.name)))
+
+  console.print(table)
+
+  # Checking the existence of paths
+  images_dir = Path(args_dict.images_dir)
+  project_dir = Path(args_dict.project_dir)
+
+  if not images_dir.exists():
+    console.print(f"[bold red][ERROR]: [/bold red] Path {images_dir} not found!")
+    exit(1)
+
+  if not project_dir.exists():
+    console.print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
+    exit(1)
+
+  model_args = ModelArgs(vae_filename=args_dict.vae_filename, checkpoint_filename=args_dict.vae_checkpoint, project_dir=project_dir)
+
+  train_loader, _ = CelebA.get_dataloaders(
+    height=args_dict.height,
+    width=args_dict.width,
+    batch_size=args_dict.batch_size,
+    images_dir=images_dir
+  )
+
+  if args_dict.resume:
+    console.print("\n[bold cyan][INFO]: [/bold cyan] Recovering model from checkpoint...")
+
+    trainer = VAE_Trainer.from_checkpoint(model_args)
+    trainer.set_train_loader(train_loader)
+    trainer.explain_checkpoint()
+  else:
+    console.print("\n[bold cyan][INFO]: [/bold cyan] Instantiating model and trainer...")
+    vae = VAE(height=args_dict.height, width=args_dict.width, latent_dim=args_dict.latent_dim, sampling=args_dict.sampling, model_type=args_dict.type)
+
+    console.print("\n[bold green][DEBUG]: [/bold green] Printing summary of encoder...")
+    console.print(str(summary(vae.encoder, input_size=(train_loader.batch_size, 3, args_dict.height, args_dict.width))))
+
+    console.print("\n[bold green][DEBUG]: [/bold green] Printing summary of decoder...")
+    console.print(str(summary(vae.decoder, input_size=(train_loader.batch_size, vae.latent_dim))))
+
+    trainer = VAE_Trainer(
+      vae=vae,
+      train_loader=train_loader,
+      create_optimizer=(args_dict.optimizer, args_dict.lr),
+      gradient_clipping=args_dict.clip_gradients,
+      LAMBDA=args_dict.lam,
+      RESCALE=args_dict.rescale
+    )
+
+  try:
+    console.print("\n[bold cyan][INFO]: [/bold cyan] Starting training...")
+
+    trainer.train(
+      model_args=model_args,
+      EPOCHS=args_dict.epochs,
+      epochs_to_create_checkpoint=args_dict.epochs_to_checkpoint,
+      epochs_to_monitor=args_dict.epochs_to_monitor,
+      optimize=args_dict.optimize,
+    )
+  except KeyboardInterrupt:
+    console.print("\n[bold red][ERROR]: [/bold red] Training was interrupted. Saving a last checkpoint...")
+    trainer.create_checkpoint(model_args=model_args)
+  finally:
+    monitor_path = model_args.project_dir / "training" / ("monitor_" + model_args.vae_filename)
+    monitor_path.mkdir(parents=True, exist_ok=True)
+
+    console.save_html((monitor_path / "training_log.html").absolute().as_posix())
 
 def parse_args():
   parser = argparse.ArgumentParser(description="VAE training script")
@@ -39,7 +140,7 @@ def parse_args():
   parser.add_argument("--epochs_to_monitor", type=int, default=0, help="Numb128er of epochs to monitor the training process. Defaults to 0")
   parser.add_argument("--epochs", type=int, default=100, help="Number of epochs to train. Defaults to 100")
   parser.add_argument("--optimize", type=bool, default=True, help="Enables JIT and AMP. Defaults to True. Use --optimize False to disable")
-  parser.add_argument("--clip_gradients", action="store_false", default=False, dest="clip", help="Enables gradient clipping. Defaults to False, use --clip_gradients True to enable")
+  parser.add_argument("--clip_gradients", action="store_false", default=False, dest="clip_gradients", help="Enables gradient clipping. Defaults to False, use --clip_gradients True to enable")
 
   args = parser.parse_args()
   args.images_dir = args.images_dir or config("IMG_DIR", default=Path.cwd())
@@ -49,87 +150,9 @@ def parse_args():
   args.vae_checkpoint = args.vae_checkpoint or config("VAE_CHECKPOINT", default="VAE_checkpoint.pt")
   return args
 
-def print_args(args, console):
-  table = Table(title="VAE Training Configuration")
-
-  table.add_column("Parameter", style="cyan")
-  table.add_column("Value", style="magenta")
-
-  for key, value in vars(args).items():
-    table.add_row(key, str(value))
-
-  console.print(table)
-
 if __name__ == "__main__":
-  console = Console(record=True)
-
   # Parsing args from command line
   args = parse_args()
 
-  # Printing args
-  print_args(args, console)
-
-  # Checking the existence of paths
-  images_dir = Path(args.images_dir)
-  project_dir = Path(args.project_dir)
-
-  if not images_dir.exists():
-    console.print(f"[bold red][ERROR]: [/bold red] Path {images_dir} not found!")
-    exit(1)
-
-  if not project_dir.exists():
-    console.print(f"[bold red][ERROR]: [/bold red] Path {project_dir} not found!")
-    exit(1)
-
-  model_args = ModelArgs(vae_filename=args.vae_filename, checkpoint_filename=args.vae_checkpoint, project_dir=project_dir)
-
-  train_loader, _ = CelebA.get_dataloaders(
-    height=args.height,
-    width=args.width,
-    batch_size=args.batch_size,
-    images_dir=images_dir
-  )
-
-  if args.resume:
-    console.print("\n[bold cyan][INFO]: [/bold cyan] Recovering model from checkpoint...")
-
-    trainer = VAE_Trainer.from_checkpoint(model_args)
-    trainer.set_train_loader(train_loader)
-    trainer.explain_checkpoint()
-  else:
-    console.print("\n[bold cyan][INFO]: [/bold cyan] Instantiating model and trainer...")
-    vae = VAE(height=args.height, width=args.width, latent_dim=args.latent_dim, sampling=args.sampling, model_type=args.type)
-
-    console.print("\n[bold green][DEBUG]: [/bold green] Printing summary of encoder...")
-    console.print(str(summary(vae.encoder, input_size=(train_loader.batch_size, 3, args.height, args.width))))
-
-    console.print("\n[bold green][DEBUG]: [/bold green] Printing summary of decoder...")
-    console.print(str(summary(vae.decoder, input_size=(train_loader.batch_size, vae.latent_dim))))
-
-    trainer = VAE_Trainer(
-      vae=vae,
-      train_loader=train_loader,
-      create_optimizer=(args.optimizer, args.lr),
-      gradient_clipping=args.clip,
-      LAMBDA=args.lam,
-      RESCALE=args.rescale
-    )
-
-  try:
-    console.print("\n[bold cyan][INFO]: [/bold cyan] Starting training...")
-
-    trainer.train(
-      model_args=model_args,
-      EPOCHS=args.epochs,
-      epochs_to_create_checkpoint=args.epochs_to_checkpoint,
-      epochs_to_monitor=args.epochs_to_monitor,
-      optimize=args.optimize,
-    )
-  except KeyboardInterrupt:
-    console.print("\n[bold red][ERROR]: [/bold red] Training was interrupted. Saving a last checkpoint...")
-    trainer.create_checkpoint(model_args=model_args)
-  finally:
-    monitor_path = model_args.project_dir / "training" / ("monitor_" + model_args.vae_filename)
-    monitor_path.mkdir(parents=True, exist_ok=True)
-
-    console.save_html((monitor_path / "training_log.html").absolute().as_posix())
+  train_args = TrainingArgs(**{k: v for k, v in vars(args).items() if k in TrainingArgs.__dataclass_fields__})
+  train(train_args)
