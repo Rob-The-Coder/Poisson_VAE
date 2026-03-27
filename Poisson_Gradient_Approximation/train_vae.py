@@ -1,4 +1,5 @@
 import argparse
+from typing import Callable
 
 from torchinfo import summary
 from rich.console import Console
@@ -34,7 +35,7 @@ class TrainingArgs:
   optimize: bool = True
   clip_gradients: bool = False
 
-def train(args_dict: TrainingArgs):
+def train(args_dict: TrainingArgs, callback: Callable = None):
   console = Console(record=True)
   table = Table(title="VAE Training Configuration")
 
@@ -101,6 +102,7 @@ def train(args_dict: TrainingArgs):
       epochs_to_create_checkpoint=args_dict.epochs_to_checkpoint,
       epochs_to_monitor=args_dict.epochs_to_monitor,
       optimize=args_dict.optimize,
+      callback=callback
     )
   except KeyboardInterrupt:
     console.print("\n[bold red][ERROR]: [/bold red] Training was interrupted. Saving a last checkpoint...")

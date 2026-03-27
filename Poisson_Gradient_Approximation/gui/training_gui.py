@@ -1,8 +1,11 @@
 import streamlit as st
-import subprocess
+import pandas as pd
 
 from decouple import config
 from pathlib import Path
+from dataclasses import asdict
+
+from train_vae import TrainingArgs, train
 
 def get_checkpoints(base_dir):
   checkpoint_path = Path(base_dir) / "checkpoints"
@@ -93,65 +96,79 @@ with st.container(border=True):
     if add_btn:
       vae_filename = vae_filename or config("VAE_FILENAME", default="VAE.pt")
       vae_checkpoint = vae_checkpoint or config("VAE_CHECKPOINT", default="VAE_checkpoint.pt")
-      st.session_state.training_queue.append({
-        "Resume training": resume,
-        "Use optimization": optimize,
-        "Clip gradients": clip_gradients,
-        "Image folder path": img_path,
-        "Project directory": project_dir,
-        "VAE filename": vae_filename,
-        "VAE checkpoint": vae_checkpoint,
-        "Height": height,
-        "Width": width,
-        "Batch size": batch_size,
-        "Learning rate": lr,
-        "Rescale parameter": rescale,
-        "Lambda parameter": lam,
-        "Latent space dimension": latent_dim,
-        "Model type": model_type,
-        "Sampling": sampling,
-        "Optimizer": optimizer,
-        "Training epochs": epochs,
-        "Epochs to checkpoint": epochs_to_checkpoint,
-        "Epochs to monitor": epochs_to_monitor
-      })
+
+      st.session_state.training_queue.append(
+        TrainingArgs(
+          images_dir=img_path,
+          project_dir=project_dir,
+          vae_filename=vae_filename,
+          vae_checkpoint=vae_checkpoint,
+          height=height,
+          width=width,
+          batch_size=batch_size,
+          lr=lr,
+          rescale=rescale,
+          lam=lam,
+          latent_dim=latent_dim,
+          type=model_type,
+          sampling=sampling,
+          optimizer=optimizer,
+          resume=resume,
+          epochs_to_checkpoint=epochs_to_checkpoint,
+          epochs_to_monitor=epochs_to_monitor,
+          epochs=epochs,
+          optimize=optimize,
+          clip_gradients=clip_gradients
+        )
+      )
 
 if st.session_state.training_queue:
   st.divider()
   with st.container(border=True):
     st.subheader("Training queue")
-    for i, config in enumerate(st.session_state.training_queue):
+    for i, args_obj in enumerate(st.session_state.training_queue):
       col1, col2, col3 = st.columns(3)
       with col1:
         st.markdown(f"#### Job {i + 1}")
       with col2:
         st.space("stretch")
       with col3:
-        if st.button(label="", icon=":material/delete:", width="stretch", type="primary", key=f"btn{i}"):
-          del st.session_state.training_queue[i - 1]
+        del_btn = st.button(label="", icon=":material/delete:", width="stretch", type="primary", key=f"btn{i}")
+        if del_btn:
+          del st.session_state.training_queue[i]
 
       markdown= "| :blue[Parameter] | :violet[Value] |\n|-----------|-------|\n"
-      for key, value in config.items():
+      for key, value in asdict(args_obj).items():
         markdown += f"| {key} | {str(value)} |\n"
       st.markdown(markdown, width="stretch")
 
-    if st.button("START TRAINING", type="primary", width="stretch"):
-      command=f""
-      for i, config in enumerate(st.session_state.training_queue):
-        command += (f"python3 train_vae.py --images_dir '{config['Image folder path']}' --project_dir '{config['Project directory']}' "
-                  f"--vae_filename '{config['VAE filename']}' --vae_checkpoint '{config['VAE checkpoint']}' --height {config['Height']} "
-                  f"--width {config['Width']} --batch_size {config['Batch size']} --lr {config['Learning rate']} --rescale {config['Rescale parameter']} "
-                  f"--lam {config['Lambda parameter']} --latent_dim {config['Latent space dimension']} --type '{config['Model type']}' --sampling {config['Sampling']} "
-                  f"--optimizer '{config['Optimizer']}' --epochs_to_checkpoint {config['Epochs to checkpoint']} --epochs_to_monitor {config['Epochs to monitor']} "
-                  f"--epochs {config['Training epochs']} ")
+    start_training_btn = st.button("START TRAINING", type="primary", width="stretch")
 
-        if not config['Use optimization']:
-          command += "--optimize False "
-        if config['Resume training']:
-          command += "--resume "
-        if clip_gradients:
-          command += "--clip_gradients True "
-        command += ";"
+  st.divider()
+  if start_training_btn:
+    for i, args_obj in enumerate(st.session_state.training_queue):
+      with st.container(border=True):
+        st.subheader(f"Monitoring job {i + 1}")
 
-      subprocess.Popen(command, shell=True)
-      st.success(f"Training command successfully created and launched!")
+        col1, col2 = st.columns([0.1, 0.9])
+        with col1:
+          status_text = st.empty()
+        with col2:
+          prog_bar = st.progress(0)
+
+        chart_loss = st.line_chart(pd.DataFrame(columns=["Loss", "KL", "Rec"]))
+        preview_img = st.empty()
+
+        def update_gui(epoch, loss, kl, rec):
+          status_text.write(f"Epoch {epoch}:")
+          prog_bar.progress(epoch / args_obj.epochs)
+
+          chart_loss.add_rows(pd.DataFrame({"Total loss": [loss], "KL": [kl], "Rec": [rec]}))
+
+          if epoch % args_obj.epochs_to_monitor==0:
+            monitor_path = Path(args_obj.project_dir) / "training" / ("monitor_" + args_obj.vae_filename)
+
+            preview_img.image(monitor_path / f"faces_epoch_{epoch}.png")
+
+        train(args_obj, update_gui)
+        st.success(f"Job {i +1} successfully finished!")

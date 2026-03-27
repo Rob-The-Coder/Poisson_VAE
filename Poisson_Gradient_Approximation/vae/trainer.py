@@ -1,7 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
 
-from typing import Optional
+from typing import Optional, Callable
 from torch.amp.autocast_mode import autocast
 from torch.cuda.amp.grad_scaler import GradScaler
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
@@ -152,7 +152,7 @@ class VAE_Trainer():
     plt.savefig(monitor_path / "live_loss_plot.png", dpi=150)
     plt.close()
 
-  def train(self, model_args: ModelArgs, EPOCHS: int = 200, epochs_to_create_checkpoint: int = 0, epochs_to_monitor: int = 0, optimize: bool = False):
+  def train(self, model_args: ModelArgs, EPOCHS: int = 200, epochs_to_create_checkpoint: int = 0, epochs_to_monitor: int = 0, optimize: bool = False, callback: Callable = None):
     torch.backends.cudnn.benchmark = True
 
     if self.train_loader is None:
@@ -181,6 +181,7 @@ class VAE_Trainer():
     metrics_history = []
 
     batch_update_rate = len(self.train_loader) // 100
+    batch_update_rate = 1
     initial = self.trained_epochs
     with Progress(
         SpinnerColumn(),
@@ -266,3 +267,5 @@ class VAE_Trainer():
             "batch_reconstruction_error": float(metrics["batch_reconstruction_error"])
           })
           self.monitor(model_args, metrics_history, (epoch + 1))
+          if callback:
+            callback((epoch + 1), float(metrics["avg_epoch_loss"]), float(metrics["batch_kl_divergence"]), float(metrics["batch_reconstruction_error"]))
