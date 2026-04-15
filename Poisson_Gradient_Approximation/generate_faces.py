@@ -33,6 +33,7 @@ class GenerationArgs:
   clusterization: bool = True
   batch_size: int = 512
   num_samples: int = 5000
+  latent_analysis: bool = True
 
 def get_faces(faces, title: str = ""):
   plt.rcParams['figure.dpi'] = 200
@@ -126,6 +127,82 @@ def generate(args_dict: GenerationArgs):
     plt.tight_layout()
     figures.append(fig)
 
+  if args_dict.latent_analysis:
+    _, valid_loader = CelebA.get_dataloaders(
+      height=args_dict.height,
+      width=args_dict.width,
+      batch_size=args_dict.batch_size,
+      images_dir=images_dir
+    )
+
+    # For each dimension of the latent space, starting from a base image (taken from the validation loader) progressively larger value is replaced
+    all_rows = []
+    steps_number = 8
+    steps = torch.linspace(0, 50, steps_number).float().to(device)
+    x, _ = next(iter(valid_loader))
+    base_z = vae.encoder(x[0:1].to(device))
+
+    for dim in range(vae.latent_dim):
+      z_strip = base_z.repeat(steps_number, 1).float().to(device)
+      for i, step in enumerate(steps):
+        z_strip[i, dim] = step
+
+      # Checking difference to see whether the traversal is significant
+      z_diff = base_z.repeat(2, 1)
+      z_diff[0, dim] = steps[0]
+      z_diff[1, dim] = steps[-1]
+
+      # Image generation
+      with torch.no_grad():
+        decoded = vae.decode(z_strip)
+        decoded_diffs = vae.decode(z_diff)
+
+        diff = torch.abs(decoded_diffs[0] - decoded_diffs[1]).mean().item()
+        if diff > 0.05:
+          all_rows.append(decoded)
+
+    save_path = project_dir / "analysis" / f"traversal_{args_dict.vae_filename}.png"
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    grid = torch.cat(all_rows, dim=0)
+    torchvision.utils.save_image(grid, save_path, nrow=steps_number, normalize=True, value_range=(-1, 1))
+
+    def get_mean_latent(indices):
+      latents = []
+      for img_idx in indices:
+        img = train_set[img_idx][0][None]
+        with torch.no_grad():
+          lam = vae.encoder(img)
+          latents.append(lam)
+      return torch.cat(latents).mean(dim=0)
+
+    attr_df = CelebA.get_attributes(images_dir)
+    train_set = CelebA.get_train_set(args_dict.height, args_dict.width, images_dir)
+
+    attributes = ['Male', 'Smiling', 'Eyeglasses', 'Young', 'Bald', 'Blond_Hair', 'Oval_Face', 'Wearing_Hat', 'Pointy_Nose']
+    manipulated_imgs = []
+    # For each attribute the positive and "negative" attribute vector is computed by taking the mean of a number of samples. Then the actual
+    # vector direction is computed as the difference between the two.
+    for attr_name in attributes:
+      pos_idx, neg_idx = train_set.get_train_idx(attr_df, attr_name)
+      z_pos_mean = get_mean_latent(pos_idx)
+      z_neg_mean = get_mean_latent(neg_idx)
+
+      attr_vector = z_pos_mean - z_neg_mean
+
+      alphas = torch.linspace(-5, 5, steps_number).float().to(device)
+      z_strip = base_z.repeat(steps_number, 1).float().to(device)
+
+      for i, alpha in enumerate(alphas):
+        z_strip[i, :] = base_z + alpha * attr_vector
+
+      with torch.no_grad():
+        decoded = vae.decode(z_strip)
+        manipulated_imgs.append(decoded)
+
+    grid = torch.cat(manipulated_imgs, dim=0)
+    save_path = project_dir / "analysis" / f"attributes_manipulation_{args_dict.vae_filename}.png"
+    torchvision.utils.save_image(grid, save_path, nrow=steps_number, normalize=True, value_range=(-1, 1))
+
   return figures
 
 def parse_args():
@@ -153,6 +230,8 @@ def parse_args():
   parser.add_argument("--clusterization", type=bool, default=True, help="Whether to compute clusterization. Defaults to True")
   parser.add_argument("--batch_size", type=int, default=512, help="Batch size used to compute clusters. Defaults to 512")
   parser.add_argument("--num_samples", type=int, default=5000, help="Samples number used to compute clusterization. Defaults to 5000")
+
+  parser.add_argument("--latent_analysis", type=bool, default=True, help="")
 
   args = parser.parse_args()
   args.images_dir = args.images_dir or config("IMG_DIR", default=Path.cwd())

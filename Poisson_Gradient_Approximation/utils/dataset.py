@@ -93,3 +93,14 @@ class CelebA(CustomDataset):
   @staticmethod
   def get_attributes(path: Path):
     return pd.read_csv(path / 'list_attr_celeba.csv').replace(-1, 0)
+
+  def get_train_idx(self, attr_df, attribute: str):
+    id_to_idx = {name: i for i, name in enumerate(self.img_partition)}
+
+    pos_ids = attr_df[attr_df[attribute]==1]['image_id'].head(500).tolist()
+    neg_ids = attr_df[attr_df[attribute]!=1]['image_id'].head(500).tolist()
+
+    pos_idx = [id_to_idx[img_id] for img_id in pos_ids if img_id in id_to_idx]
+    neg_idx = [id_to_idx[img_id] for img_id in neg_ids if img_id in id_to_idx]
+
+    return pos_idx, neg_idx

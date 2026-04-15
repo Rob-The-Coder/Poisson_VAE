@@ -84,7 +84,8 @@ if btn:
       end=end,
       clusterization=clusterize,
       batch_size=batch_size,
-      num_samples=num_samples
+      num_samples=num_samples,
+      latent_analysis=True
     )
 
     markdown = "| :blue[Parameter] | :violet[Value] |\n|-----------|-------|\n"
