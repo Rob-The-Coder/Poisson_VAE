@@ -91,6 +91,19 @@ class CelebA(CustomDataset):
     return train_set
 
   @staticmethod
+  def get_valid_set(height, width, path: Path):
+    transform = CelebA.get_transform(height, width)
+
+    img_folder_path = path / "img_align_celeba" / "img_align_celeba"
+    partition_df = pd.read_csv(path / "list_eval_partition.csv")
+
+    valid_partition = partition_df[partition_df['partition']==1]['image_id'].tolist()
+
+    valid_set = CelebA(img_folder_path, valid_partition, transform=transform)
+
+    return valid_set
+
+  @staticmethod
   def get_attributes(path: Path):
     return pd.read_csv(path / 'list_attr_celeba.csv').replace(-1, 0)
 

@@ -129,7 +129,7 @@ class VAE_Trainer():
     self.vae.eval()
     with torch.no_grad():
       samples = self.vae.generate_faces(num_faces=16, device=self.__device, LAMBDA=self.LAMBDA)
-    fig = get_faces(samples, f"faces_epoch_{epoch}.png")
+    fig = get_faces(samples, f"faces_epoch_{epoch}.png", square=True)
     fig.savefig(monitor_path / f"faces_epoch_{epoch}.png")
 
     epoch_loss = [d["avg_epoch_loss"] for d in metrics_history]
