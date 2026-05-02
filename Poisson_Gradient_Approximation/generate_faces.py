@@ -56,7 +56,6 @@ def get_faces(faces, title: str = "", nrow: int = 8, square: bool = True):
   return fig
 
 def generate(args_dict: GenerationArgs):
-  figures = []
   device = "cuda" if torch.cuda.is_available() else "cpu"
 
   # Checking the existence of paths
@@ -77,7 +76,6 @@ def generate(args_dict: GenerationArgs):
 
   print("\n[bold cyan][INFO]: [/bold cyan] Generating faces...")
   faces = vae.generate_faces(num_faces=args_dict.num_faces, device=device, LAMBDA=args_dict.lam)
-  #figures.append(get_faces(faces, args_dict.title))
   yield get_faces(faces, args_dict.title)
 
   if args_dict.interpolation:
@@ -93,12 +91,10 @@ def generate(args_dict: GenerationArgs):
 
     z = (1 - beta) * z0 + beta * z1
     y = vae.decode(z)
-    #figures.append(get_faces(y, "Interpolation", square=False))
     yield get_faces(y, "Interpolation", square=False)
 
   if args_dict.clusterization:
     print("\n[bold cyan][INFO]: [/bold cyan] Performing clusterization...")
-    latents = []
 
     valid_set = CelebA.get_valid_set(args_dict.height, args_dict.width, images_dir)
     attr_df = CelebA.get_attributes(images_dir)
@@ -112,6 +108,7 @@ def generate(args_dict: GenerationArgs):
     )
 
     # Computing the latents
+    latents = []
     with torch.no_grad():
       for i, (batch, _) in enumerate(valid_loader):
         z = vae(batch.to(device)).p1
@@ -123,24 +120,50 @@ def generate(args_dict: GenerationArgs):
     fig, axes = plt.subplots(2, 2, figsize=(15, 12))
     axes = axes.flatten()
 
+    fig2, axes2 = plt.subplots(2, 2, figsize=(15, 12))
+    axes2 = axes2.flatten()
+
     # Computing embedding for all attributes
     reducer = umap.UMAP(n_components=2, n_neighbors=50, min_dist=0.0)
     embedding = reducer.fit_transform(z_combined)
 
     attributes_to_test = ['Male', 'Smiling', 'Blond_Hair', 'Young']
     for i, attr in enumerate(attributes_to_test):
+      x = embedding[:, 0]
+      y = embedding[:, 1]
       labels = attr_df[attr].values[:args_dict.num_samples]
-      sc = axes[i].scatter(embedding[:, 0], embedding[:, 1], c=labels, s=2, alpha=0.5, cmap='coolwarm')
+
+      # Calcoliamo i limiti basandoci sul 2° e 98° percentile per escludere le "scie" estreme
+      x_min, x_max = np.percentile(x, [10, 90])
+      y_min, y_max = np.percentile(y, [10, 90])
+
+      # Aggiungiamo un piccolo margine (es. 10%) per non tagliare i punti sul bordo
+      pad_x = (x_max - x_min) * 0.1
+      pad_y = (y_max - y_min) * 0.1
+
+      sc1 = axes[i].scatter(x, y, c=labels, s=2, alpha=0.5, cmap='coolwarm')
+      sc2 = axes2[i].scatter(embedding[:, 0], embedding[:, 1], c=labels, s=2, alpha=0.5, cmap='coolwarm')
+
       axes[i].set_title(f"Attribute: {attr}")
       axes[i].set_xlabel("U1")
       axes[i].set_ylabel("U2")
       axes[i].set_xticks([])
       axes[i].set_yticks([])
-      plt.colorbar(sc, ax=axes[i])
+      axes[i].set_xlim(x_min - pad_x, x_max + pad_x)
+      axes[i].set_ylim(y_min - pad_y, y_max + pad_y)
+
+      plt.colorbar(sc1, ax=axes[i])
+
+      axes2[i].set_title(f"Attribute: {attr}, zoomed")
+      axes2[i].set_xlabel("U1")
+      axes2[i].set_ylabel("U2")
+      axes2[i].set_xticks([])
+      axes2[i].set_yticks([])
+      plt.colorbar(sc2, ax=axes2[i])
 
     plt.tight_layout()
-    #figures.append(fig)
     yield fig
+    yield fig2
 
   if args_dict.latent_analysis:
     print("\n[bold cyan][INFO]: [/bold cyan] Performing latent space analysis...")
@@ -171,7 +194,6 @@ def generate(args_dict: GenerationArgs):
       # Image generation
       with torch.no_grad():
         decoded = vae.decode(z_strip)
-        decoded_diffs = vae.decode(z_diff)
 
         diff = torch.abs(decoded[0] - decoded[args_dict.steps_number_traversal - 1]).mean().item()
         if diff > args_dict.threshold:
@@ -186,7 +208,7 @@ def generate(args_dict: GenerationArgs):
     def get_mean_latent(indices):
       latents = []
       for img_idx in indices:
-        img = train_set[img_idx][0][None]
+        img = train_set[img_idx][0][None].to(device)
         with torch.no_grad():
           lam = vae(img).p1
           latents.append(lam)
@@ -219,7 +241,6 @@ def generate(args_dict: GenerationArgs):
     grid = torch.cat(manipulated_imgs, dim=0)
     fig = get_faces(grid, title="Attributes direction applied to image", nrow=args_dict.steps_number_attributes, square=False)
     fig.savefig(project_dir / "analysis" / f"attributes_manipulation_{args_dict.vae_filename}.png")
-    #figures.append(fig)
     yield fig
 
     # Lambda distribution
@@ -233,15 +254,15 @@ def generate(args_dict: GenerationArgs):
         lam = vae(x.to(device)).p1
         lambdas.append(lam.cpu())
         if len(lambdas) > 10: break
-    lambdas = torch.cat(lambdas, dim=0).numpy()
-    lambdas = np.floor(lambdas)
+    lambdas = torch.cat(lambdas, dim=0).cpu().numpy()
+    lambdas = np.round(lambdas)
 
     z = torch.poisson(torch.full((args_dict.batch_size * 10, vae.latent_dim), args_dict.lam, device=device, dtype=torch.float32))
-    distributions = [lambdas.flatten(), z.flatten()]
+    distributions = [lambdas.flatten(), z.cpu().flatten()]
 
     for i, distribution in enumerate(distributions):
       axes[i].hist(distribution, bins=250, color='skyblue', edgecolor='black')
-      axes[i].set_title(f"$\lambda$ distribution {"in the latent space" if i==0 else "from torch.poisson"}")
+      axes[i].set_title(f"$\lambda$ distribution {'in the latent space' if i==0 else 'from torch.poisson'}")
       axes[i].set_xlabel("$\lambda$")
       axes[i].set_ylabel("Frequency")
       axes[i].set_xlim(left=0, right=20)
@@ -249,7 +270,6 @@ def generate(args_dict: GenerationArgs):
       axes[i].grid(True, alpha=0.3)
 
     fig.savefig(project_dir / "analysis" / "lambda_distribution.png")
-    #figures.append(fig)
     yield fig
 
     # Checking for "dead" dimensions (es. mean lambda < 0.1)
@@ -261,24 +281,27 @@ def generate(args_dict: GenerationArgs):
     lam_a = vae(train_set[603][0][None].to(device)).p1
     lam_b = vae(train_set[80000][0][None].to(device)).p1
 
-    mid = vae.latent_dim // 2
-    mix_1 = torch.cat([lam_a[:, :mid], lam_b[:, mid:]], dim=1)
-    mix_2 = torch.cat([lam_b[:, :mid], lam_a[:, mid:]], dim=1)
+    results = []
+    split_points = [64, 128, 192, 256, 320, 384]
+    # Inseriamo l'originale A come riferimento
+    results.append(train_set[603][0][None].to(device))
+    results.append(vae.decode(lam_a))
 
-    res_a = vae.decode(lam_a)
-    res_b = vae.decode(lam_b)
-    res_mix1 = vae.decode(mix_1)
-    res_mix2 = vae.decode(mix_2)
+    for split in split_points:
+      # Creiamo il mix: prendiamo da A fino allo 'split', il resto da B
+      mixed_lam = torch.cat([lam_a[:, :split], lam_b[:, split:]], dim=1)
+      results.append(vae.decode(mixed_lam))
 
-    grid = torch.cat([train_set[603][0][None], res_a, res_mix1, res_mix2, res_b, train_set[80000][0][None]], dim=0)
-    fig = get_faces(grid, title="Style mixing", nrow=6, square=False)
-    #figures.append(fig)
-    yield get_faces(grid, title="Style mixing", nrow=6, square=False)
+    # Inseriamo l'originale B come riferimento
+    results.append(vae.decode(lam_b))
+    results.append(train_set[80000][0][None].to(device))
+
+    grid = torch.cat(results, dim=0)
+    yield get_faces(grid, title="Style mixing", nrow=10, square=False)
 
     # Pure reconstruction to test decoder capabilities
     x, _ = next(iter(valid_loader))
     y = vae(x[0:36].to(device)).reconstruction
-    # figures.append(get_faces(y, "Pure reconstruction", square=True))
     yield get_faces(y, "Pure reconstruction", square=True)
 
 def parse_args():

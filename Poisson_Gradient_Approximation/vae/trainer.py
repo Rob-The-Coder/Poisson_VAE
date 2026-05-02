@@ -181,7 +181,6 @@ class VAE_Trainer():
     metrics_history = []
 
     batch_update_rate = len(self.train_loader) // 100
-    batch_update_rate = 1
     initial = self.trained_epochs
     with Progress(
         SpinnerColumn(),
