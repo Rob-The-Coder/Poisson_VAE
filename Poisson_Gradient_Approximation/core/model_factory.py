@@ -8,6 +8,9 @@ class ModelFactory:
     ("PGA", "60M"): (Encoder_60M, Decoder_60M),
     ("GRT", "53M"): (Encoder_GRT_53M, Decoder_GRT_53M),
     ("GRT", "60M"): (Encoder_GRT_60M, Decoder_GRT_60M),
+    ("RLT", "36M"): (Encoder_36M, Decoder_36M),
+    ("RLT", "53M"): (Encoder_53M, Decoder_53M),
+    ("RLT", "60M"): (Encoder_60M, Decoder_60M),
   }
 
   @classmethod

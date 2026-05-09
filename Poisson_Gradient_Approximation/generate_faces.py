@@ -205,28 +205,31 @@ def generate(args_dict: GenerationArgs):
     torchvision.utils.save_image(grid, save_path, nrow=args_dict.steps_number_traversal, normalize=True, value_range=(-1, 1))
 
     # Attribute directions
+    attr_df = CelebA.get_attributes(images_dir)
+    valid_set = CelebA.get_valid_set(args_dict.height, args_dict.width, images_dir)
+
     def get_mean_latent(indices):
       latents = []
       for img_idx in indices:
-        img = train_set[img_idx][0][None].to(device)
+        img = valid_set[img_idx][0][None].to(device)
         with torch.no_grad():
           lam = vae(img).p1
           latents.append(lam)
       return torch.cat(latents).mean(dim=0)
 
-    attr_df = CelebA.get_attributes(images_dir)
-    train_set = CelebA.get_train_set(args_dict.height, args_dict.width, images_dir)
-
-    attributes = ['Male', 'Smiling', 'Eyeglasses', 'Young', 'Bald', 'Blond_Hair', 'Oval_Face', 'Wearing_Hat', 'Pointy_Nose']
+    attributes = ['Male', 'Smiling', 'Eyeglasses', 'Young', 'Bald', 'Blond_Hair', 'Double_Chin', 'Straight_Hair', 'No_Beard']
+    vectors = {}
     manipulated_imgs = []
-    # For each attribute the positive and "negative" attribute vector is computed by taking the mean of a number of samples. Then the actual
+    # For each attribute the "positive" and "negative" attribute vector is computed by taking the mean of a number of samples. Then the actual
     # vector direction is computed as the difference between the two.
+    #vectors = torch.load("analysis/vectors.pt")
     for attr_name in attributes:
-      pos_idx, neg_idx = train_set.get_train_idx(attr_df, attr_name)
+      pos_idx, neg_idx = valid_set.get_partition_idx(attr_df, attr_name)
       z_pos_mean = get_mean_latent(pos_idx)
       z_neg_mean = get_mean_latent(neg_idx)
 
       attr_vector = z_pos_mean - z_neg_mean
+      vectors[attr_name] = attr_vector
 
       alphas = torch.linspace(args_dict.start_alpha, args_dict.end_alpha, args_dict.steps_number_attributes).float().to(device)
       z_strip = base_z.repeat(args_dict.steps_number_attributes, 1).float().to(device)
@@ -238,10 +241,28 @@ def generate(args_dict: GenerationArgs):
         decoded = vae.decode(z_strip)
         manipulated_imgs.append(decoded)
 
+    #torch.save(vectors, 'analysis/vectors.pt')
+
+    for vector in vectors:
+      alphas = torch.linspace(args_dict.start_alpha, args_dict.end_alpha, args_dict.steps_number_attributes).float().to(device)
+      z_strip = base_z.repeat(args_dict.steps_number_attributes, 1).float().to(device)
+
+      for i, alpha in enumerate(alphas):
+        z_strip[i, :] = base_z + alpha * vectors[vector]
+
+      with torch.no_grad():
+        decoded = vae.decode(z_strip)
+        manipulated_imgs.append(decoded)
+
     grid = torch.cat(manipulated_imgs, dim=0)
     fig = get_faces(grid, title="Attributes direction applied to image", nrow=args_dict.steps_number_attributes, square=False)
     fig.savefig(project_dir / "analysis" / f"attributes_manipulation_{args_dict.vae_filename}.png")
     yield fig
+
+    for vector in vectors:
+      z = torch.poisson(torch.full((args_dict.num_faces, vae.latent_dim), args_dict.lam, device=device, dtype=torch.float32))
+      faces = vae.decode(z - 4 * vectors[vector])
+      yield get_faces(faces, f"Generation with {vector} attribute applied, using $\\alpha = -4$")
 
     # Lambda distribution
     # Check lambda distribution on real sample gotten from the validation loader against the "true" distribution
@@ -278,21 +299,23 @@ def generate(args_dict: GenerationArgs):
     print(f"Latent dimensions 'dead' (λ < 0.1): {dead_dims}/{vae.latent_dim}")
 
     # Style mixing
+    train_set = CelebA.get_train_set(args_dict.height, args_dict.width, images_dir)
+
     lam_a = vae(train_set[603][0][None].to(device)).p1
     lam_b = vae(train_set[80000][0][None].to(device)).p1
 
     results = []
     split_points = [64, 128, 192, 256, 320, 384]
-    # Inseriamo l'originale A come riferimento
+    # original and reconstruction
     results.append(train_set[603][0][None].to(device))
     results.append(vae.decode(lam_a))
 
+    # mixes
     for split in split_points:
-      # Creiamo il mix: prendiamo da A fino allo 'split', il resto da B
       mixed_lam = torch.cat([lam_a[:, :split], lam_b[:, split:]], dim=1)
       results.append(vae.decode(mixed_lam))
 
-    # Inseriamo l'originale B come riferimento
+    # reconstruction and original
     results.append(vae.decode(lam_b))
     results.append(train_set[80000][0][None].to(device))
 

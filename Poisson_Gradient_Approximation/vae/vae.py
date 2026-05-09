@@ -6,8 +6,8 @@ from typing import Optional
 from core.vae_output import VAEOutput
 from core.model_factory import ModelFactory
 from core.model_args import ModelArgs
-from utils.sampling import CustomPoissonSampling, GaussianReparametrizationTrick
-from utils.loss import Poisson_ELBO_Loss, Gaussian_ELBO_Loss
+from utils.sampling import CustomPoissonSampling, GaussianReparametrizationTrick, ReinforcementLearningTrick
+from utils.loss import Poisson_ELBO_Loss, Gaussian_ELBO_Loss, Reinforcement_ELBO_Loss
 
 class VAE(torch.nn.Module):
   def __init__(
@@ -15,6 +15,7 @@ class VAE(torch.nn.Module):
     height,
     width,
     latent_dim: int,
+    k: int = 10,
     sampling: str = "PGA",
     model_type: str = "36M"
   ):
@@ -22,11 +23,13 @@ class VAE(torch.nn.Module):
     self.__latent_dim = latent_dim
     self.__height = height
     self.__width = width
+    self.__k = k
 
     self.__sampling = sampling
     SAMPLING_MAP = {
       "PGA": (Poisson_ELBO_Loss(), CustomPoissonSampling().apply, self.__forward_pga, self.__generate_pga),
       "GRT": (Gaussian_ELBO_Loss(), GaussianReparametrizationTrick().apply, self.__forward_grt, self.__generate_grt),
+      "RLT": (Reinforcement_ELBO_Loss(), ReinforcementLearningTrick().apply, self.__forward_rlt, self.__generate_pga),
     }
     if self.__sampling not in SAMPLING_MAP:
       supported = ", ".join(SAMPLING_MAP.keys())
@@ -59,7 +62,7 @@ class VAE(torch.nn.Module):
 
     if model_args is not None:
       # Loading model from filesystem
-      data = torch.load(Path(model_args.project_dir) / "models/" / model_args.vae_filename)
+      data = torch.load(Path(model_args.project_dir) / "models/" / model_args.vae_filename, map_location=torch.device('cpu'))
 
     return VAE.__restore_vae(data)
 
@@ -109,6 +112,9 @@ class VAE(torch.nn.Module):
 
     return faces
 
+  def __generate_rlt(self, num_faces, device, **kwargs):
+    ...
+
   def generate_faces(self, num_faces, device, **kwargs):
     return self.__generation_logic(num_faces, device, **kwargs)
 
@@ -130,6 +136,23 @@ class VAE(torch.nn.Module):
     y = self.decoder(z)
 
     return VAEOutput(reconstruction=y, p1=mu, p2=log_var)
+
+  def __forward_rlt(self, x):
+    lam = self.encoder(x)
+    lam = lam.clamp(1e-5, 1e3)
+
+    print(torch.mean(lam), torch.std(lam))
+
+    zs = []
+    ys = []
+    for i in range(self.__k):
+      z_k = self.__sampling_method(lam, self.__k)
+      y_k = self.decoder(z_k.float().clamp(max=50.0))
+
+      zs.append(z_k)
+      ys.append(y_k)
+
+    return VAEOutput(reconstruction=ys, p1=lam, p2=zs)
 
   def forward(self, x):
     return self.__forward_logic(x)

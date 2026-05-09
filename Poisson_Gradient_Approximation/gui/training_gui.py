@@ -69,10 +69,12 @@ with st.container(border=True):
     with col2:
       rescale = st.number_input("Rescale hyperparameter", value=1e-2, format="%.2f", disabled=resume, help="RESCALE parameter. Defaults to 1e-2")
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns([0.4, 0.2, 0.4])
     with col1:
-      lam = st.number_input("Lambda parameter of the Poisson distribution", value=10, disabled=resume, help="Lambda parameter. Defaults to 10")
+      lam = st.number_input("Poisson's $\lambda$", value=10, disabled=resume, help="Lambda parameter. Defaults to 10")
     with col2:
+      k = st.number_input("K", value=10, disabled=resume, help="Number of sampled images used to compute gradients. Defaults to 10")
+    with col3:
       latent_dim = st.number_input("Latent space dimension", value=128, disabled=resume, help="Dimension of the latent space. Defaults to 128")
 
     # Training
@@ -80,7 +82,7 @@ with st.container(border=True):
     with col1:
       model_type = st.segmented_control("Model type", options=["36M", "53M", "60M"], default="36M", disabled=resume, help="Decide which version of the model to use. Defaults to 36M")
     with col2:
-      sampling = st.segmented_control("Sampling strategy", options=["PGA", "GRT"], default="PGA", help="Decide which sampling strategy to adopt. Defaults to PGA")
+      sampling = st.segmented_control("Sampling strategy", options=["PGA", "GRT", "RLT"], default="PGA", help="Decide which sampling strategy to adopt. Defaults to PGA")
     with col3:
       optimizer = st.segmented_control("Optimizer", options=["AdamW", "Adam", "SGD"], default="AdamW", disabled=resume, help="Decide which type of optimizer to use. Defaults to AdamW")
 
@@ -110,6 +112,7 @@ with st.container(border=True):
           rescale=rescale,
           lam=lam,
           latent_dim=latent_dim,
+          k=k,
           type=model_type,
           sampling=sampling,
           optimizer=optimizer,

@@ -25,6 +25,7 @@ class TrainingArgs:
   rescale: float = 1e-2
   lam: int = 10
   latent_dim: int = 128
+  k: int = 10
   type: str = "36M"
   sampling: str = "PGA"
   optimizer: str = "AdamW"
@@ -76,7 +77,7 @@ def train(args_dict: TrainingArgs, callback: Callable = None):
     trainer.explain_checkpoint()
   else:
     console.print("\n[bold cyan][INFO]: [/bold cyan] Instantiating model and trainer...")
-    vae = VAE(height=args_dict.height, width=args_dict.width, latent_dim=args_dict.latent_dim, sampling=args_dict.sampling, model_type=args_dict.type)
+    vae = VAE(height=args_dict.height, width=args_dict.width, latent_dim=args_dict.latent_dim, k=args_dict.k, sampling=args_dict.sampling, model_type=args_dict.type)
 
     console.print("\n[bold green][DEBUG]: [/bold green] Printing summary of encoder...")
     console.print(str(summary(vae.encoder, input_size=(train_loader.batch_size, 3, args_dict.height, args_dict.width))))
@@ -132,6 +133,7 @@ def parse_args():
   parser.add_argument("--rescale", type=float, default=1e-2, help="RESCALE parameter. Defaults to 1e-2")
   parser.add_argument("--lam", type=float, default=10, help="LAMBDA parameter. Defaults to 10")
   parser.add_argument("--latent_dim", type=int, default=128, help="Dimension of the latent space. Defaults to 128")
+  parser.add_argument("--k", type=int, default=10, help="Number of sampled images used to compute gradients. Defaults to 10")
 
   # Training - Hardware/Optimization
   parser.add_argument("--type", type=str, choices=["36M", "53M", "60M"], default="36M", help="Decide which version of the model to use. Defaults to 36M")

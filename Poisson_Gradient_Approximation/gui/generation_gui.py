@@ -125,8 +125,6 @@ if btn:
     st.markdown(markdown, width="stretch")
 
     with st.spinner("🎨 Generating..."):
-      #figs = generate(args_obj)
-
       for i, fig in enumerate(generate(args_obj)):
         st.divider()
         st.pyplot(fig)
