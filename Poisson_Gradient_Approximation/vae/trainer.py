@@ -1,5 +1,6 @@
 import torch
 import matplotlib.pyplot as plt
+import numpy as np
 
 from typing import Optional, Callable
 from torch.amp.autocast_mode import autocast
@@ -7,7 +8,6 @@ from torch.cuda.amp.grad_scaler import GradScaler
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn, MofNCompleteColumn
 
 from vae import VAE
-from utils import ELBO_Loss, Poisson_ELBO_Loss
 from core.model_args import ModelArgs
 
 class VAE_Trainer():
@@ -158,7 +158,8 @@ class VAE_Trainer():
     if self.train_loader is None:
       raise ValueError("Error! Trying to train without specifying the train loader.")
 
-    self.vae.to(self.__device)
+    self.vae = self.vae.to(self.__device, memory_format=torch.channels_last)
+    #self.vae.to(self.__device)
 
     # Checking if optimization is enabled and tracing
     scaler = None
@@ -168,8 +169,9 @@ class VAE_Trainer():
       tmp_latents = torch.randn(tmp_img.size()[0], self.vae.latent_dim, device=self.__device, dtype=tmp_img.dtype)
 
       self.vae.train()
-      self.vae.encoder = torch.jit.trace(self.vae.encoder, tmp_img)
-      self.vae.decoder = torch.jit.trace(self.vae.decoder, tmp_latents)
+      with torch.autocast(self.__device, dtype=torch.float16):
+        self.vae.encoder = torch.jit.trace(self.vae.encoder, tmp_img.half())
+        self.vae.decoder = torch.jit.trace(self.vae.decoder, tmp_latents.half())
 
       scaler = GradScaler(enabled=True)
 
@@ -180,7 +182,7 @@ class VAE_Trainer():
     }
     metrics_history = []
 
-    batch_update_rate = len(self.train_loader) // 100
+    batch_update_rate = max(1, len(self.train_loader) // 100)
     initial = self.trained_epochs
     with Progress(
         SpinnerColumn(),
@@ -203,20 +205,32 @@ class VAE_Trainer():
         num_batch = 0
         curr_epoch = epoch + initial + 1
 
+        steps_per_cycle = EPOCHS // 2
+        step_in_cycle = epoch % steps_per_cycle
+        warmup_steps = steps_per_cycle * 0.9
+
+        center = warmup_steps / 2
+        x = (step_in_cycle - center) / (warmup_steps / 2)
+
+        beta = 1.0 if step_in_cycle > warmup_steps else 1 / (1 + np.exp(-10 * x))
+
         # Second bar reset for current epoch
         progress.reset(batch_task, description=f"[cyan]Epoch {curr_epoch} Batches")
 
         # Epoch training loop
         for x, label in self.train_loader:
-          x = x.to(self.__device)
+          x = x.to(self.__device, memory_format=torch.channels_last)
+          #x = x.to(self.__device)
 
-          self.optimizer.zero_grad()
+          self.optimizer.zero_grad(set_to_none=True)
+          #self.optimizer.zero_grad()
 
           # Executing optimized version or normal depending on optimize
           if optimize:
             with autocast(self.__device, enabled=True, dtype=torch.float16):
               out = self.vae(x)
               kl_div, rec_error = self.vae.compute_loss(x, out, rescale=self.RESCALE, lambda_=self.LAMBDA)
+              kl_div *= beta
 
             with autocast(self.__device, enabled=False):
               loss = kl_div + rec_error
@@ -233,7 +247,8 @@ class VAE_Trainer():
           else:
             out = self.vae(x)
             kl_div, rec_error = self.vae.compute_loss(x, out, rescale=self.RESCALE, lambda_=self.LAMBDA)
-                
+            kl_div *= beta
+
             loss = kl_div + rec_error
             tot_loss += loss.item()
             loss.backward()

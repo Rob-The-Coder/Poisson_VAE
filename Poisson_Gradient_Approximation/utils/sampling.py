@@ -54,10 +54,10 @@ class ReinforcementLearningTrick(torch.autograd.Function):
     k = ctx._k
 
     advantage = reward - baseline  # center the signal
-    advantage = torch.nan_to_num(advantage, nan=0.0)
-    advantage = advantage / advantage.std().clamp(min=1e-8)
+    #advantage = torch.nan_to_num(advantage, nan=0.0)
+    #advantage = advantage / advantage.std().clamp(min=1e-8)
 
     score = (z - lam) / lam.clamp(min=1e-5)  # ∂ log p(z|λ) / ∂λ  =  (z-λ)/λ
     grad_lam = (advantage * score) / k
 
-    return torch.clamp(grad_lam, -5.0, 5.0), None
+    return grad_lam, None

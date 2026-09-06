@@ -44,7 +44,7 @@ class VAE(torch.nn.Module):
     
   @staticmethod
   def __restore_vae(data):
-    vae = VAE(data["height"], data["width"], data["latent_dim"], data["sampling"], data["type"])
+    vae = VAE(data["height"], data["width"], data["latent_dim"], data["k"] if "k" in data else 20, data["sampling"], data["type"])
 
     vae.load_state_dict(data["params"])
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -87,6 +87,7 @@ class VAE(torch.nn.Module):
       "height": self.__height,
       "width": self.__width,
       "latent_dim": self.__latent_dim,
+      "k": self.__k,
       "sampling": self.__sampling,
       "type": self.__model_type
     }
@@ -139,15 +140,15 @@ class VAE(torch.nn.Module):
 
   def __forward_rlt(self, x):
     lam = self.encoder(x)
-    lam = lam.clamp(1e-5, 1e3)
 
-    print(torch.mean(lam), torch.std(lam))
+    #with torch.no_grad():
+    #  print(torch.mean(lam), torch.std(lam))
 
     zs = []
     ys = []
     for i in range(self.__k):
       z_k = self.__sampling_method(lam, self.__k)
-      y_k = self.decoder(z_k.float().clamp(max=50.0))
+      y_k = self.decoder(z_k.float())
 
       zs.append(z_k)
       ys.append(y_k)

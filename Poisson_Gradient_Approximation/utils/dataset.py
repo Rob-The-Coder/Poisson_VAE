@@ -1,9 +1,11 @@
-import torch
-import torchvision
-import pandas as pd
+import random
 
+import torch
+import pandas as pd
+import torchvision.transforms.v2 as T
+
+from torchvision.io import read_image, write_jpeg
 from abc import ABC, abstractmethod
-from PIL import Image
 from pathlib import Path
 
 class CustomDataset(ABC, torch.utils.data.Dataset):
@@ -40,28 +42,41 @@ class CelebA(CustomDataset):
 
   def __getitem__(self, idx):
     img_path = self.img_dir / self.img_partition[idx]
-    image = Image.open(img_path).convert('RGB') # VAE expects 3 channels
+    image = read_image(str(img_path))
     if self.transform:
       image = self.transform(image)
-    return image, 0 # Return a dummy label for compatibility with DataLoader
+    return image, 0  # Return a dummy label for compatibility with DataLoader
+
+  @staticmethod
+  def preprocess_to_disk(images_dir: Path, height: int, width: int, output_dir: Path):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    transform = T.Compose([
+      T.CenterCrop(178),
+      T.Resize((height, width), antialias=True),
+    ])
+
+    img_folder = images_dir / "img_align_celeba" / "img_align_celeba"
+    for img_name in img_folder.iterdir():
+      img = read_image(str(img_name))
+      img = transform(img)
+      write_jpeg(img, str(output_dir / img_name.name), quality=95)
 
   @staticmethod
   def get_transform(height, width):
-    transform = torchvision.transforms.Compose([
-      torchvision.transforms.CenterCrop(178),
-      torchvision.transforms.Resize((height, width)),
-      torchvision.transforms.RandomHorizontalFlip(),
-      torchvision.transforms.ToTensor(),
-      torchvision.transforms.Normalize(0.5, 0.5)
+    return T.Compose([
+      T.RandomHorizontalFlip(),
+      T.ToDtype(torch.float32, scale=True),
+      T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
     ])
-
-    return transform
 
   @staticmethod
   def get_dataloaders(height, width, batch_size, images_dir: Path):
     transform = CelebA.get_transform(height, width)
 
-    img_folder_path = images_dir / "img_align_celeba" / "img_align_celeba"
+    img_folder_path = images_dir / "img_align_celeba_resized" / "img_align_celeba_resized"
+    if not img_folder_path.exists() or not img_folder_path.is_dir():
+      CelebA.preprocess_to_disk(images_dir, height, width, img_folder_path)
+
     partition_df = pd.read_csv(images_dir / "list_eval_partition.csv")
 
     train_partition = partition_df[partition_df['partition']==0]['image_id'].tolist()
@@ -71,9 +86,9 @@ class CelebA(CustomDataset):
     valid_set = CelebA(img_folder_path, valid_partition, transform=transform)
 
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, drop_last=True,
-                                               num_workers=4, pin_memory=True)
+                                               num_workers=4, pin_memory=True, persistent_workers=True, prefetch_factor=2)
     valid_loader = torch.utils.data.DataLoader(valid_set, batch_size=batch_size, shuffle=False, drop_last=True,
-                                               num_workers=4, pin_memory=True)
+                                               num_workers=4, pin_memory=True, persistent_workers=True, prefetch_factor=2)
 
     return train_loader, valid_loader
 
@@ -81,7 +96,10 @@ class CelebA(CustomDataset):
   def get_train_set(height, width, path: Path):
     transform = CelebA.get_transform(height, width)
 
-    img_folder_path = path / "img_align_celeba" / "img_align_celeba"
+    img_folder_path = path / "img_align_celeba_resized" / "img_align_celeba_resized"
+    if not img_folder_path.exists() or not img_folder_path.is_dir():
+      CelebA.preprocess_to_disk(path, height, width, img_folder_path)
+
     partition_df = pd.read_csv(path / "list_eval_partition.csv")
 
     train_partition = partition_df[partition_df['partition']==0]['image_id'].tolist()
@@ -94,7 +112,10 @@ class CelebA(CustomDataset):
   def get_valid_set(height, width, path: Path):
     transform = CelebA.get_transform(height, width)
 
-    img_folder_path = path / "img_align_celeba" / "img_align_celeba"
+    img_folder_path = path / "img_align_celeba_resized" / "img_align_celeba_resized"
+    if not img_folder_path.exists() or not img_folder_path.is_dir():
+      CelebA.preprocess_to_disk(path, height, width, img_folder_path)
+
     partition_df = pd.read_csv(path / "list_eval_partition.csv")
 
     valid_partition = partition_df[partition_df['partition']==1]['image_id'].tolist()

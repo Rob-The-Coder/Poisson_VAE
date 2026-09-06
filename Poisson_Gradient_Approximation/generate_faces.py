@@ -6,12 +6,18 @@ import math
 import umap
 import argparse
 
+from matplotlib.lines import Line2D
+from narwhals.stable import v1
 from rich import print
 from rich.console import Console
 from rich.table import Table
 from decouple import config
 from pathlib import Path
 from dataclasses import dataclass
+
+from torch.utils.data import Subset, DataLoader
+from torcheval.metrics import FrechetInceptionDistance
+from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn, MofNCompleteColumn
 
 from utils import CelebA
 from vae import VAE
@@ -126,6 +132,13 @@ def generate(args_dict: GenerationArgs):
     # Computing embedding for all attributes
     reducer = umap.UMAP(n_components=2, n_neighbors=50, min_dist=0.0)
     embedding = reducer.fit_transform(z_combined)
+    '''
+    attr_labels = {
+      'Male': ('Female', 'Male'),
+      'Smiling': ('Not Smiling', 'Smiling'),
+      'Blond_Hair': ('Not Blond', 'Blond Hair'),
+      'Young': ('Not Young', 'Young'),
+    }
 
     attributes_to_test = ['Male', 'Smiling', 'Blond_Hair', 'Young']
     for i, attr in enumerate(attributes_to_test):
@@ -133,17 +146,20 @@ def generate(args_dict: GenerationArgs):
       y = embedding[:, 1]
       labels = attr_df[attr].values[:args_dict.num_samples]
 
-      # Calcoliamo i limiti basandoci sul 2° e 98° percentile per escludere le "scie" estreme
       x_min, x_max = np.percentile(x, [10, 90])
       y_min, y_max = np.percentile(y, [10, 90])
-
-      # Aggiungiamo un piccolo margine (es. 10%) per non tagliare i punti sul bordo
       pad_x = (x_max - x_min) * 0.1
       pad_y = (y_max - y_min) * 0.1
 
-      sc1 = axes[i].scatter(x, y, c=labels, s=2, alpha=0.5, cmap='coolwarm')
-      sc2 = axes2[i].scatter(embedding[:, 0], embedding[:, 1], c=labels, s=2, alpha=0.5, cmap='coolwarm')
+      colors = np.where(labels==1, 'red', 'blue')
+      neg_label, pos_label = attr_labels[attr]
 
+      legend_elements = [
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='blue', markersize=6, label=neg_label),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=6, label=pos_label),
+      ]
+
+      axes[i].scatter(x, y, c=colors, s=2, alpha=0.5)
       axes[i].set_title(f"Attribute: {attr}")
       axes[i].set_xlabel("U1")
       axes[i].set_ylabel("U2")
@@ -151,19 +167,81 @@ def generate(args_dict: GenerationArgs):
       axes[i].set_yticks([])
       axes[i].set_xlim(x_min - pad_x, x_max + pad_x)
       axes[i].set_ylim(y_min - pad_y, y_max + pad_y)
+      axes[i].legend(handles=legend_elements, loc='upper right', markerscale=1)
 
-      plt.colorbar(sc1, ax=axes[i])
-
-      axes2[i].set_title(f"Attribute: {attr}, zoomed")
+      axes2[i].scatter(embedding[:, 0], embedding[:, 1], c=colors, s=2, alpha=0.5)
+      axes2[i].set_title(f"Attribute: {attr}")
       axes2[i].set_xlabel("U1")
       axes2[i].set_ylabel("U2")
       axes2[i].set_xticks([])
       axes2[i].set_yticks([])
-      plt.colorbar(sc2, ax=axes2[i])
+      axes2[i].legend(handles=legend_elements, loc='upper right', markerscale=1)
 
     plt.tight_layout()
     yield fig
     yield fig2
+    '''
+
+    # --- [Configurazione Palette a 4 Colori] ---
+    colors_palette = {
+      'Male': '#1f77b4',  # Blu
+      'Smiling': '#ff7f0e',  # Arancione
+      'Blond_Hair': '#2ca02c',  # Verde
+      'Young': '#d62728'  # Rosso
+    }
+    color_default = '#e0e0e0'  # Grigio per i punti senza nessuno dei 4 attributi
+
+    attributes_to_test = ['Male', 'Smiling', 'Blond_Hair', 'Young']
+
+    # 1. Calcoliamo la frequenza reale di ogni attributo nel tuo sample corrente
+    # Contiamo quanti 1 ci sono per ogni colonna
+    counts = {attr: attr_df[attr].values[:args_dict.num_samples].sum() for attr in attributes_to_test}
+
+    # 2. Ordiniamo gli attributi dal PIÙ COMUNE al PIÙ RARO
+    # In questo modo il più raro viene disegnato per ultimo e sovrascrive gli altri, rimanendo visibile
+    priority_order = sorted(attributes_to_test, key=lambda x: counts[x], reverse=True)
+
+    # Stampo l'ordine calcolato in console (comodo per il tuo debugging)
+    print(f"Ordine di disegno (dal comune al raro): {priority_order}")
+
+    # 3. Assegnazione dinamica dei colori
+    point_colors = np.full(args_dict.num_samples, color_default, dtype=object)
+    for attr in priority_order:
+      mask = attr_df[attr].values[:args_dict.num_samples]==1
+      point_colors[mask] = colors_palette[attr]
+
+    # --- [4. Creazione del Grafico Singolo] ---
+    fig, ax = plt.subplots(figsize=(12, 10), facecolor='white')
+
+    x = embedding[:, 0]
+    y = embedding[:, 1]
+
+    # Disegniamo prima lo sfondo grigio e poi i punti colorati per dare massima definizione
+    bg_mask = (point_colors==color_default)
+    fg_mask = ~bg_mask
+
+    ax.scatter(x[bg_mask], y[bg_mask], c=color_default, s=3, alpha=0.15, label='Altri Attributi')
+    ax.scatter(x[fg_mask], y[fg_mask], c=point_colors[fg_mask], s=5, alpha=0.75)
+
+    # Creazione della legenda manuale seguendo l'ordine di priorità visiva
+    legend_elements = [
+      Line2D([0], [0], marker='o', color='w', markerfacecolor=colors_palette[attr], markersize=9, label=attr)
+      for attr in priority_order
+    ]
+    legend_elements.append(
+      Line2D([0], [0], marker='o', color='w', markerfacecolor=color_default, markersize=9, label='Altri'))
+
+    # Pulizia assi e Zoom ottimizzato con percentili per escludere gli outlier di UMAP
+    ax.set_title("Mappa dello Spazio Latente per Attributo Dominante (CelebA)", fontsize=16, fontweight='bold', pad=15)
+    ax.set_xlabel("U1", fontsize=12)
+    ax.set_ylabel("U2", fontsize=12)
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    ax.legend(handles=legend_elements, loc='upper right', fontsize=11, frameon=True, shadow=True)
+
+    plt.tight_layout()
+    yield fig
 
   if args_dict.latent_analysis:
     print("\n[bold cyan][INFO]: [/bold cyan] Performing latent space analysis...")
@@ -209,37 +287,40 @@ def generate(args_dict: GenerationArgs):
     valid_set = CelebA.get_valid_set(args_dict.height, args_dict.width, images_dir)
 
     def get_mean_latent(indices):
-      latents = []
-      for img_idx in indices:
-        img = valid_set[img_idx][0][None].to(device)
-        with torch.no_grad():
-          lam = vae(img).p1
-          latents.append(lam)
-      return torch.cat(latents).mean(dim=0)
+      subset = Subset(valid_set, indices)
+      loader = DataLoader(subset, batch_size=256, shuffle=False, num_workers=2)
 
-    attributes = ['Male', 'Smiling', 'Eyeglasses', 'Young', 'Bald', 'Blond_Hair', 'Double_Chin', 'Straight_Hair', 'No_Beard']
+      latents_sum = None
+      total_samples = 0
+      with torch.no_grad():
+        for batch in loader:
+          imgs = batch[0].to(device)
+          lam = vae(imgs).p1
+
+          if latents_sum is None:
+            latents_sum = lam.sum(dim=0)
+          else:
+            latents_sum += lam.sum(dim=0)
+
+          total_samples += imgs.size(0)
+
+      return latents_sum / total_samples
+
+    attributes = ['Male', 'Smiling', 'Eyeglasses', 'Young', 'Bald', 'Blond_Hair', 'No_Beard']
     vectors = {}
     manipulated_imgs = []
     # For each attribute the "positive" and "negative" attribute vector is computed by taking the mean of a number of samples. Then the actual
     # vector direction is computed as the difference between the two.
     #vectors = torch.load("analysis/vectors.pt")
     for attr_name in attributes:
+      print(f"Computing vectors for attribute: {attr_name}")
       pos_idx, neg_idx = valid_set.get_partition_idx(attr_df, attr_name)
       z_pos_mean = get_mean_latent(pos_idx)
       z_neg_mean = get_mean_latent(neg_idx)
 
       attr_vector = z_pos_mean - z_neg_mean
       vectors[attr_name] = attr_vector
-
-      alphas = torch.linspace(args_dict.start_alpha, args_dict.end_alpha, args_dict.steps_number_attributes).float().to(device)
-      z_strip = base_z.repeat(args_dict.steps_number_attributes, 1).float().to(device)
-
-      for i, alpha in enumerate(alphas):
-        z_strip[i, :] = base_z + alpha * attr_vector
-
-      with torch.no_grad():
-        decoded = vae.decode(z_strip)
-        manipulated_imgs.append(decoded)
+      print("OK")
 
     #torch.save(vectors, 'analysis/vectors.pt')
 
@@ -255,14 +336,83 @@ def generate(args_dict: GenerationArgs):
         manipulated_imgs.append(decoded)
 
     grid = torch.cat(manipulated_imgs, dim=0)
-    fig = get_faces(grid, title="Attributes direction applied to image", nrow=args_dict.steps_number_attributes, square=False)
+    fig = get_faces(grid, title="", nrow=args_dict.steps_number_attributes, square=False)
     fig.savefig(project_dir / "analysis" / f"attributes_manipulation_{args_dict.vae_filename}.png")
     yield fig
 
+    '''
     for vector in vectors:
       z = torch.poisson(torch.full((args_dict.num_faces, vae.latent_dim), args_dict.lam, device=device, dtype=torch.float32))
       faces = vae.decode(z - 4 * vectors[vector])
       yield get_faces(faces, f"Generation with {vector} attribute applied, using $\\alpha = -4$")
+    '''
+
+    alpha = 3
+    z = torch.poisson(torch.full((args_dict.steps_number_attributes, vae.latent_dim), args_dict.lam, device=device, dtype=torch.float32))
+    #z = torch.randn(args_dict.steps_number_attributes, vae.latent_dim, device=device)
+    row1 = z
+    row2 = z + alpha * vectors["Smiling"]
+    row3 = z + alpha * vectors["Young"]
+    row4 = z + alpha * vectors["Smiling"] + alpha * vectors["Young"]
+
+    with torch.no_grad():
+      img1 = vae.decode(row1)
+      img2 = vae.decode(row2)
+      img3 = vae.decode(row3)
+      img4 = vae.decode(row4)
+
+    grid = torch.cat([img1, img2, img3, img4], dim=0)
+    fig = get_faces(grid, title="", nrow=args_dict.steps_number_attributes,square=False)
+    yield fig
+
+    row2 = z + alpha * vectors["Male"]
+    row3 = z + alpha * vectors["No_Beard"]
+    row4 = z + alpha * vectors["Male"] + alpha * vectors["No_Beard"]
+
+    with torch.no_grad():
+      img1 = vae.decode(row1)
+      img2 = vae.decode(row2)
+      img3 = vae.decode(row3)
+      img4 = vae.decode(row4)
+
+    grid = torch.cat([img1, img2, img3, img4], dim=0)
+    fig = get_faces(grid, title="", nrow=args_dict.steps_number_attributes, square=False)
+    yield fig
+
+    row2 = z + alpha * vectors["Blond_Hair"]
+    row3 = z + alpha * vectors["Eyeglasses"]
+    row4 = z + alpha * vectors["Blond_Hair"] + alpha * vectors["Eyeglasses"]
+
+    with torch.no_grad():
+      img1 = vae.decode(row1)
+      img2 = vae.decode(row2)
+      img3 = vae.decode(row3)
+      img4 = vae.decode(row4)
+
+    grid = torch.cat([img1, img2, img3, img4], dim=0)
+    fig = get_faces(grid, title="", nrow=args_dict.steps_number_attributes, square=False)
+    yield fig
+
+    # Rescaling sensitivity
+    def get_model(model_name):
+      ma = ModelArgs(vae_filename=model_name, checkpoint_filename="", project_dir=project_dir)
+      v = VAE.from_pretrained(ma)
+      v.eval()
+
+      return v
+
+    z = torch.poisson(torch.full((4, vae.latent_dim), 4.0, device=device, dtype=torch.float32))
+    models = ["VAE_checkpoint_60M_L4_300epochs_LR_RES5_LAT512.pt", "VAE_checkpoint_60M_L4_300epochs_LR_RES1_LAT512.pt", "VAE_checkpoint_60M_L4_300epochs_LR_RES5e-1_LAT512.pt", "VAE_checkpoint_60M_L4_300epochs_LR_RES1e-1_LAT512.pt", "VAE_checkpoint_60M_L4_300epochs_LR_RES5e-2_LAT512.pt"]
+    imgs = []
+
+    with torch.no_grad():
+      for model_name in models:
+        v = get_model(model_name)
+        imgs.append(v.decode(z))
+
+    grid = torch.cat(imgs, dim=0)
+    fig = get_faces(grid, title="", nrow=4, square=False)
+    yield fig
 
     # Lambda distribution
     # Check lambda distribution on real sample gotten from the validation loader against the "true" distribution
@@ -281,12 +431,18 @@ def generate(args_dict: GenerationArgs):
     z = torch.poisson(torch.full((args_dict.batch_size * 10, vae.latent_dim), args_dict.lam, device=device, dtype=torch.float32))
     distributions = [lambdas.flatten(), z.cpu().flatten()]
 
+    max_freq = max(
+      np.histogram(distributions[0], bins=250)[0].max(),
+      np.histogram(distributions[1], bins=250)[0].max()
+    )
+
     for i, distribution in enumerate(distributions):
       axes[i].hist(distribution, bins=250, color='skyblue', edgecolor='black')
       axes[i].set_title(f"$\lambda$ distribution {'in the latent space' if i==0 else 'from torch.poisson'}")
       axes[i].set_xlabel("$\lambda$")
       axes[i].set_ylabel("Frequency")
       axes[i].set_xlim(left=0, right=20)
+      axes[i].set_ylim(0, max_freq * 1.1)
       axes[i].set_xticks(range(21))
       axes[i].grid(True, alpha=0.3)
 
@@ -298,16 +454,20 @@ def generate(args_dict: GenerationArgs):
     dead_dims = np.sum(mean_lambdas < 0.1)
     print(f"Latent dimensions 'dead' (λ < 0.1): {dead_dims}/{vae.latent_dim}")
 
+  if True:
     # Style mixing
     train_set = CelebA.get_train_set(args_dict.height, args_dict.width, images_dir)
 
-    lam_a = vae(train_set[603][0][None].to(device)).p1
-    lam_b = vae(train_set[80000][0][None].to(device)).p1
+
+    idx_first = 603
+    idx_last = 80000
+    lam_a = vae(train_set[idx_first][0][None].to(device)).p1
+    lam_b = vae(train_set[idx_last][0][None].to(device)).p1
 
     results = []
     split_points = [64, 128, 192, 256, 320, 384]
     # original and reconstruction
-    results.append(train_set[603][0][None].to(device))
+    results.append(train_set[idx_first][0][None].to(device))
     results.append(vae.decode(lam_a))
 
     # mixes
@@ -317,15 +477,81 @@ def generate(args_dict: GenerationArgs):
 
     # reconstruction and original
     results.append(vae.decode(lam_b))
-    results.append(train_set[80000][0][None].to(device))
+    results.append(train_set[idx_last][0][None].to(device))
 
     grid = torch.cat(results, dim=0)
     yield get_faces(grid, title="Style mixing", nrow=10, square=False)
 
+  if True:
+    _, valid_loader = CelebA.get_dataloaders(
+      height=args_dict.height,
+      width=args_dict.width,
+      batch_size=args_dict.batch_size,
+      images_dir=images_dir
+    )
+
     # Pure reconstruction to test decoder capabilities
     x, _ = next(iter(valid_loader))
-    y = vae(x[0:36].to(device)).reconstruction
-    yield get_faces(y, "Pure reconstruction", square=True)
+    y = vae(x[0:16].to(device)).reconstruction
+
+    try:
+      _ = y.ndim
+      y = y
+    except AttributeError:
+      y = y[0]
+
+    yield get_faces(y, "", square=True)
+
+  if True:
+    print("Computing FID...")
+    train_set = CelebA.get_train_set(args_dict.height, args_dict.width, images_dir)
+
+    train_loader_fid = torch.utils.data.DataLoader(train_set, batch_size=32, shuffle=False, drop_last=True, num_workers=2)
+    fid = FrechetInceptionDistance(device=device)
+
+    MAX_IMAGES = 10000
+    processed_images = 0
+
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        MofNCompleteColumn(),  # Mostra "X di Y" immagini elaborate
+        TimeRemainingColumn(),  # Mostra il tempo stimato rimanente
+      ) as progress:
+      fid_task = progress.add_task("[cyan]FID ", total=MAX_IMAGES)
+
+      for batch, _ in train_loader_fid:
+        current_batch_size = batch.size(0)
+        if processed_images + current_batch_size > MAX_IMAGES:
+          remaining = MAX_IMAGES - processed_images
+
+          if remaining <= 0:
+            break
+          batch = batch[:remaining]
+          current_batch_size = remaining
+
+        # real images batch
+        batch = batch.to(device)
+
+        # generating images for comparison
+        generated_images = vae.generate_faces(num_faces=current_batch_size, LAMBDA=args_dict.lam, device=device)
+
+        # Denormalize images from [-1, 1] to [0, 1] since FID expects images in this format
+        real_images = (batch + 1) / 2
+        generated_images = (generated_images + 1) / 2
+
+        fid.update(real_images, is_real=True)
+        fid.update(generated_images, is_real=False)
+
+        progress.update(fid_task, advance=current_batch_size)
+        processed_images += current_batch_size
+        if processed_images >= MAX_IMAGES:
+          break
+
+      # Computing FID score
+      fid_score = fid.compute()
+      print(f"FID Score: {fid_score.item()}")
 
 def parse_args():
   parser = argparse.ArgumentParser(description="VAE face generation script")

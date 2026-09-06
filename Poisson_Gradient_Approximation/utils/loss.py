@@ -61,18 +61,21 @@ class Reinforcement_ELBO_Loss(ELBO_Loss):
     zs = out.p2
     ys = out.reconstruction
 
-    kl_div = (lam * (torch.log(lam) - torch.log(lambda_)) - lam + lambda_).mean()
+    kl_div = (lam * (torch.log(lam) - torch.log(lambda_)) - lam + lambda_)
+
+    free_bits = 0.5
+    kl_div = torch.clamp(kl_div, min=free_bits).mean()
 
     rewards = []
     for y_k in ys:
-      f_k = (y_k.detach() - x).flatten(1).abs().mean(dim=-1)
+      f_k = (y_k - x).flatten(1).abs().mean(dim=-1)
       f_k = torch.nan_to_num(f_k, nan=0.0)
       rewards.append(f_k)
 
     rewards = torch.stack(rewards, dim=0)
     #baselines = self.baseline(rewards)
     total = rewards.sum(0, keepdim=True)
-    baselines = (total - rewards) / (len(zs))
+    baselines = (total - rewards) / (len(zs) - 1)
 
     # Attaching rewards and baseline to each sample's grad_fn
     B, D = lam.shape
@@ -82,6 +85,6 @@ class Reinforcement_ELBO_Loss(ELBO_Loss):
       z_k.grad_fn._reward = r_k
       z_k.grad_fn._baseline = b_k
 
-    #recon = rewards.mean()
-    recon = (ys[0] - x).flatten(1).abs().mean()
+    recon = rewards.mean()
+    #recon = (ys[0] - x).flatten(1).abs().mean()
     return kl_div * rescale_, recon
